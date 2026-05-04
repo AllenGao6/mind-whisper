@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MindWhisper</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1e1e1e;
+      color: #e0e0e0;
+      -webkit-app-region: drag;
+      user-select: none;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .header {
+      padding: 16px 20px 0;
+    }
+
+    h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid #333;
+      margin-bottom: 0;
+      -webkit-app-region: no-drag;
+    }
+
+    .tab {
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #777;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.2s, border-color 0.2s;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      font-family: inherit;
+    }
+    .tab:hover { color: #bbb; }
+    .tab.active {
+      color: #fff;
+      border-bottom-color: #5b9bd5;
+    }
+
+    /* ── Tab Content ── */
+    .tab-content {
+      display: none;
+      padding: 16px 20px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Status Bar ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: #2a2a2a;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      -webkit-app-region: no-drag;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #555;
+      flex-shrink: 0;
+    }
+    .status-dot.idle { background: #4ade80; }
+    .status-dot.recording { background: #ef4444; animation: pulse 1s infinite; }
+    .status-dot.transcribing { background: #facc15; animation: pulse 1.5s infinite; }
+    .status-dot.error { background: #ef4444; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    #status { font-size: 13px; color: #aaa; }
+
+    /* ── Fields ── */
+    .field {
+      margin-bottom: 16px;
+      -webkit-app-region: no-drag;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #888;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    input[type="password"],
+    input[type="text"] {
+      width: 100%;
+      padding: 8px 12px;
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 13px;
+      outline: none;
+      font-family: inherit;
+    }
+    input:focus { border-color: #5b9bd5; }
+
+    .keybind-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #keybind-btn {
+      padding: 8px 16px;
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      min-width: 140px;
+      text-align: center;
+    }
+    #keybind-btn:hover { border-color: #5b9bd5; }
+    #keybind-btn.listening {
+      border-color: #ef4444;
+      color: #ef4444;
+      animation: pulse 1s infinite;
+    }
+
+    #keybind-label { font-size: 11px; color: #666; }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+      -webkit-app-region: no-drag;
+    }
+
+    .btn {
+      padding: 8px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-primary { background: #5b9bd5; color: #fff; }
+    .btn-primary:hover { background: #4a8ac4; }
+    .btn-danger { background: #3a3a3a; color: #ef4444; }
+    .btn-danger:hover { background: #4a2a2a; }
+
+    #save-msg {
+      font-size: 13px;
+      color: #4ade80;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .hint {
+      margin-top: 16px;
+      font-size: 11px;
+      color: #555;
+      line-height: 1.5;
+    }
+
+    /* ── History ── */
+    .history-list {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-app-region: no-drag;
+    }
+
+    .history-empty {
+      text-align: center;
+      color: #555;
+      font-size: 13px;
+      padding: 40px 0;
+    }
+
+    .history-item {
+      padding: 10px 12px;
+      background: #2a2a2a;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+
+    .history-time {
+      font-size: 11px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+
+    .history-text {
+      font-size: 13px;
+      color: #ddd;
+      line-height: 1.4;
+      word-break: break-word;
+      user-select: text;
+    }
+
+    .history-actions {
+      margin-top: 12px;
+      -webkit-app-region: no-drag;
+    }
+
+    /* ── Footer credit ── */
+    .footer-credit {
+      padding: 8px 20px 10px;
+      font-size: 10px;
+      color: #555;
+      text-align: center;
+      letter-spacing: 0.3px;
+      -webkit-app-region: no-drag;
+    }
+    .footer-credit a {
+      color: #777;
+      text-decoration: none;
+    }
+    .footer-credit a:hover {
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>MindWhisper</h1>
+    <div class="tabs">
+      <button class="tab active" data-tab="settings">Settings</button>
+      <button class="tab" data-tab="history">History</button>
+    </div>
+  </div>
+
+  <!-- Settings Tab -->
+  <div id="tab-settings" class="tab-content active">
+    <div class="status-bar">
+      <div id="status-dot" class="status-dot"></div>
+      <span id="status">Initializing...</span>
+    </div>
+
+    <div class="field">
+      <label>OpenAI API Key</label>
+      <input type="password" id="api-key" placeholder="sk-..." spellcheck="false" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label>Hold-to-Record Key</label>
+      <div class="keybind-row">
+        <button id="keybind-btn">Loading...</button>
+        <span id="keybind-label"></span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="save-btn" class="btn btn-primary">Save</button>
+      <span id="save-msg"></span>
+    </div>
+
+    <div class="hint">
+      Hold the configured key to record your voice. Release to transcribe and paste.
+      <br>Grant Microphone and Accessibility permissions in System Settings if prompted.
+    </div>
+  </div>
+
+  <!-- History Tab -->
+  <div id="tab-history" class="tab-content">
+    <div class="history-list" id="history-list"></div>
+    <div class="history-actions">
+      <button id="clear-history-btn" class="btn btn-danger">Clear All</button>
+    </div>
+  </div>
+
+  <div class="footer-credit">
+    crafted by the team at <a href="https://liveq.ai" target="_blank" rel="noopener">liveq.ai</a>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

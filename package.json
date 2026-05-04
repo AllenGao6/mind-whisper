@@ -1,0 +1,58 @@
+{
+  "name": "mind-whisper",
+  "version": "1.0.0",
+  "description": "Hold-to-talk dictation for macOS — global hotkey, OpenAI Whisper, auto-paste at cursor.",
+  "main": "main.js",
+  "homepage": "https://liveq.ai",
+  "license": "MIT",
+  "author": {
+    "name": "MindWhisper contributors",
+    "url": "https://liveq.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/mind-whisper.git"
+  },
+  "keywords": [
+    "electron",
+    "macos",
+    "voice-to-text",
+    "dictation",
+    "transcription",
+    "whisper",
+    "openai",
+    "menu-bar"
+  ],
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac && codesign --deep --force --sign - dist/mac-arm64/MindWhisper.app"
+  },
+  "build": {
+    "appId": "com.mindwhisper.app",
+    "productName": "MindWhisper",
+    "mac": {
+      "icon": "logo.jpg",
+      "category": "public.app-category.productivity",
+      "target": "dmg",
+      "entitlements": "entitlements.plist",
+      "entitlementsInherit": "entitlements.plist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "assets/**",
+      "node_modules/**"
+    ]
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "openai": "^4.77.0",
+    "uiohook-napi": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^26.8.1"
+  }
+}
