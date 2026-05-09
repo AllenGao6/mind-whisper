@@ -19,7 +19,7 @@
     }
 
     .header {
-      padding: 16px 20px 0;
+      padding: 52px 20px 0;
     }
 
     h1 {
@@ -64,6 +64,7 @@
       padding: 16px 20px;
       flex: 1;
       overflow-y: auto;
+      -webkit-app-region: no-drag;
     }
     .tab-content.active {
       display: flex;
@@ -118,7 +119,9 @@
     }
 
     input[type="password"],
-    input[type="text"] {
+    input[type="text"],
+    select,
+    textarea {
       width: 100%;
       padding: 8px 12px;
       background: #2a2a2a;
@@ -129,7 +132,178 @@
       outline: none;
       font-family: inherit;
     }
-    input:focus { border-color: #5b9bd5; }
+    input:focus, select:focus, textarea:focus { border-color: #5b9bd5; }
+
+    textarea {
+      resize: vertical;
+      min-height: 110px;
+      line-height: 1.45;
+    }
+
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23888' d='M6 8L2 4h8z'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 28px;
+      cursor: pointer;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      -webkit-app-region: no-drag;
+    }
+    .toggle-row input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      cursor: pointer;
+      accent-color: #5b9bd5;
+    }
+    .toggle-row label {
+      margin: 0;
+      text-transform: none;
+      letter-spacing: 0;
+      color: #ddd;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .formatter-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      -webkit-app-region: no-drag;
+    }
+
+    .btn-secondary {
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      color: #ddd;
+    }
+    .btn-secondary:hover { border-color: #5b9bd5; }
+
+    /* ── Formatter list ── */
+    .section-divider {
+      height: 1px;
+      background: #2f2f2f;
+      margin: 18px 0 14px;
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+      -webkit-app-region: no-drag;
+    }
+
+    .preset-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .preset-row:hover { border-color: #4a4a4a; }
+    .preset-row.selected {
+      border-color: #5b9bd5;
+      background: #243340;
+    }
+
+    .preset-radio {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid #555;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .preset-row.selected .preset-radio { border-color: #5b9bd5; }
+    .preset-row.selected .preset-radio::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #5b9bd5;
+    }
+
+    .preset-name {
+      flex: 1;
+      font-size: 13px;
+      color: #e0e0e0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .preset-active-badge {
+      font-size: 9px;
+      color: #4ade80;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      font-weight: 600;
+      padding: 2px 7px;
+      background: rgba(74, 222, 128, 0.13);
+      border: 1px solid rgba(74, 222, 128, 0.3);
+      border-radius: 10px;
+    }
+
+    .btn-block {
+      display: block;
+      width: 100%;
+      background: transparent;
+      border: 1px dashed #3a3a3a;
+      color: #888;
+      padding: 9px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+      -webkit-app-region: no-drag;
+    }
+    .btn-block:hover {
+      border-color: #5b9bd5;
+      color: #5b9bd5;
+    }
+
+    .editor-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #ddd;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .editor-title .editor-name {
+      color: #5b9bd5;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 500;
+    }
+
+    .toggle-hint {
+      font-size: 11px;
+      color: #666;
+      margin: -8px 0 4px 26px;
+      line-height: 1.4;
+    }
 
     .keybind-row {
       display: flex;
@@ -180,7 +354,7 @@
     .btn-danger { background: #3a3a3a; color: #ef4444; }
     .btn-danger:hover { background: #4a2a2a; }
 
-    #save-msg {
+    #save-msg, #formatter-save-msg {
       font-size: 13px;
       color: #4ade80;
       opacity: 0;
@@ -257,6 +431,7 @@
     <h1>MindWhisper</h1>
     <div class="tabs">
       <button class="tab active" data-tab="settings">Settings</button>
+      <button class="tab" data-tab="formatter">Formatter</button>
       <button class="tab" data-tab="history">History</button>
     </div>
   </div>
@@ -289,6 +464,47 @@
     <div class="hint">
       Hold the configured key to record your voice. Release to transcribe and paste.
       <br>Grant Microphone and Accessibility permissions in System Settings if prompted.
+    </div>
+  </div>
+
+  <!-- Formatter Tab -->
+  <div id="tab-formatter" class="tab-content">
+    <div class="toggle-row">
+      <input type="checkbox" id="formatter-enabled">
+      <label for="formatter-enabled">Enable formatter</label>
+    </div>
+    <div class="toggle-hint">
+      When on, transcripts are auto-formatted using the preset marked Active below.
+    </div>
+
+    <div class="section-divider"></div>
+
+    <label>Presets</label>
+    <div class="preset-list" id="formatter-preset-list"></div>
+    <button id="formatter-new-btn" class="btn-block">+ New preset</button>
+
+    <div class="section-divider"></div>
+
+    <div class="editor-title">Editing: <span class="editor-name" id="formatter-editor-name">—</span></div>
+
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="formatter-preset-name" spellcheck="false" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label>Prompt</label>
+      <textarea id="formatter-preset-prompt" rows="6" spellcheck="false"></textarea>
+    </div>
+
+    <div class="formatter-actions">
+      <button id="formatter-save-btn" class="btn btn-primary">Save changes</button>
+      <button id="formatter-delete-btn" class="btn btn-danger">Delete preset</button>
+      <span id="formatter-save-msg"></span>
+    </div>
+
+    <div class="hint">
+      Falls back to raw transcript if formatting fails. Toggle from the menu bar to flip on/off without opening this window.
     </div>
   </div>
 

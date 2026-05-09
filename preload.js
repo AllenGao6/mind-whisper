@@ -13,4 +13,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getHistory: () => ipcRenderer.invoke('get-history'),
   clearHistory: () => ipcRenderer.invoke('clear-history'),
   setKeybindMode: (enabled) => ipcRenderer.send('set-keybind-mode', enabled),
+
+  getFormatterConfig: () => ipcRenderer.invoke('get-formatter-config'),
+  saveFormatterConfig: (cfg) => ipcRenderer.invoke('save-formatter-config', cfg),
+  onFormatterStateChanged: (callback) => ipcRenderer.on('formatter-state-changed', (_e, data) => callback(data)),
+  onFormattingStarted: (callback) => ipcRenderer.on('formatting-started', callback),
 });

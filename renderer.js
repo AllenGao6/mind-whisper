@@ -12,6 +12,16 @@ const saveMsg = document.getElementById('save-msg');
 const historyList = document.getElementById('history-list');
 const clearHistoryBtn = document.getElementById('clear-history-btn');
 
+const formatterEnabledEl = document.getElementById('formatter-enabled');
+const formatterListEl = document.getElementById('formatter-preset-list');
+const formatterEditorNameEl = document.getElementById('formatter-editor-name');
+const formatterNameEl = document.getElementById('formatter-preset-name');
+const formatterPromptEl = document.getElementById('formatter-preset-prompt');
+const formatterNewBtn = document.getElementById('formatter-new-btn');
+const formatterDeleteBtn = document.getElementById('formatter-delete-btn');
+const formatterSaveBtn = document.getElementById('formatter-save-btn');
+const formatterSaveMsg = document.getElementById('formatter-save-msg');
+
 let pendingKeycode = null;
 let pendingKeycodeLabel = null;
 
@@ -24,6 +34,7 @@ function switchTab(tabName) {
   tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   tabContents.forEach(tc => tc.classList.toggle('active', tc.id === `tab-${tabName}`));
   if (tabName === 'history') loadHistory();
+  if (tabName === 'formatter') loadFormatter();
 }
 
 tabs.forEach(tab => {
@@ -171,6 +182,148 @@ clearHistoryBtn.addEventListener('click', async () => {
   loadHistory();
 });
 
+// ── Formatter ──
+
+let formatterPresets = [];
+let formatterActiveId = null;
+
+function genPresetId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'preset-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+function findActivePreset() {
+  return formatterPresets.find((p) => p.id === formatterActiveId) || formatterPresets[0] || null;
+}
+
+function renderFormatterList() {
+  const enabled = formatterEnabledEl.checked;
+  formatterListEl.innerHTML = formatterPresets.map((p) => {
+    const isSelected = p.id === formatterActiveId;
+    const showActiveBadge = isSelected && enabled;
+    return `
+      <div class="preset-row${isSelected ? ' selected' : ''}" data-id="${escapeHtml(p.id)}">
+        <div class="preset-radio"></div>
+        <div class="preset-name">${escapeHtml(p.name || '(unnamed)')}</div>
+        ${showActiveBadge ? '<div class="preset-active-badge">Active</div>' : ''}
+      </div>
+    `;
+  }).join('');
+
+  formatterListEl.querySelectorAll('.preset-row').forEach((row) => {
+    row.addEventListener('click', async () => {
+      if (row.dataset.id === formatterActiveId) return;
+      formatterActiveId = row.dataset.id;
+      renderFormatterList();
+      renderFormatterEditor();
+      await window.electronAPI.saveFormatterConfig({ activePresetId: formatterActiveId });
+    });
+  });
+}
+
+function renderFormatterEditor() {
+  const active = findActivePreset();
+  if (!active) {
+    formatterEditorNameEl.textContent = '—';
+    formatterNameEl.value = '';
+    formatterPromptEl.value = '';
+    formatterNameEl.disabled = true;
+    formatterPromptEl.disabled = true;
+    formatterDeleteBtn.disabled = true;
+    formatterSaveBtn.disabled = true;
+    return;
+  }
+  formatterEditorNameEl.textContent = active.name || '(unnamed)';
+  formatterNameEl.disabled = false;
+  formatterPromptEl.disabled = false;
+  formatterDeleteBtn.disabled = formatterPresets.length <= 1;
+  formatterSaveBtn.disabled = false;
+  formatterNameEl.value = active.name || '';
+  formatterPromptEl.value = active.prompt || '';
+}
+
+async function loadFormatter() {
+  const cfg = await window.electronAPI.getFormatterConfig();
+  formatterPresets = (cfg.presets || []).map((p) => ({ ...p }));
+  formatterActiveId = cfg.activePresetId || (formatterPresets[0] && formatterPresets[0].id) || null;
+  formatterEnabledEl.checked = !!cfg.enabled;
+  renderFormatterList();
+  renderFormatterEditor();
+}
+
+formatterNameEl.addEventListener('input', () => {
+  const active = findActivePreset();
+  if (!active) return;
+  active.name = formatterNameEl.value;
+  formatterEditorNameEl.textContent = active.name || '(unnamed)';
+  const row = formatterListEl.querySelector(`.preset-row[data-id="${CSS.escape(active.id)}"] .preset-name`);
+  if (row) row.textContent = active.name || '(unnamed)';
+});
+
+formatterPromptEl.addEventListener('input', () => {
+  const active = findActivePreset();
+  if (!active) return;
+  active.prompt = formatterPromptEl.value;
+});
+
+formatterNewBtn.addEventListener('click', async () => {
+  const preset = { id: genPresetId(), name: 'New preset', prompt: '' };
+  formatterPresets.push(preset);
+  formatterActiveId = preset.id;
+  renderFormatterList();
+  renderFormatterEditor();
+  formatterNameEl.focus();
+  formatterNameEl.select();
+  await window.electronAPI.saveFormatterConfig({
+    activePresetId: formatterActiveId,
+    presets: formatterPresets,
+  });
+});
+
+formatterDeleteBtn.addEventListener('click', async () => {
+  if (formatterPresets.length <= 1) return;
+  formatterPresets = formatterPresets.filter((p) => p.id !== formatterActiveId);
+  formatterActiveId = formatterPresets[0].id;
+  renderFormatterList();
+  renderFormatterEditor();
+  await window.electronAPI.saveFormatterConfig({
+    activePresetId: formatterActiveId,
+    presets: formatterPresets,
+  });
+});
+
+formatterEnabledEl.addEventListener('change', async () => {
+  renderFormatterList();
+  await window.electronAPI.saveFormatterConfig({ enabled: formatterEnabledEl.checked });
+});
+
+formatterSaveBtn.addEventListener('click', async () => {
+  await window.electronAPI.saveFormatterConfig({
+    enabled: formatterEnabledEl.checked,
+    activePresetId: formatterActiveId,
+    presets: formatterPresets,
+  });
+  formatterSaveMsg.textContent = 'Saved!';
+  formatterSaveMsg.style.opacity = '1';
+  setTimeout(() => { formatterSaveMsg.style.opacity = '0'; }, 2000);
+});
+
+window.electronAPI.onFormatterStateChanged((data) => {
+  if (!data) return;
+  if (typeof data.enabled === 'boolean') {
+    formatterEnabledEl.checked = data.enabled;
+  }
+  if (data.activePresetId && data.activePresetId !== formatterActiveId) {
+    formatterActiveId = data.activePresetId;
+    renderFormatterEditor();
+  }
+  renderFormatterList();
+});
+
+window.electronAPI.onFormattingStarted(() => {
+  setStatus('transcribing', 'Formatting...');
+});
+
 // ── Keybind capture ──
 
 keybindBtn.addEventListener('click', () => {
@@ -215,6 +368,8 @@ async function init() {
   apiKeyInput.value = settings.apiKey || '';
   keybindBtn.textContent = settings.keycodeLabel || `Key ${settings.keycode}`;
   keybindLabel.textContent = `Keycode: ${settings.keycode}`;
+
+  await loadFormatter();
 
   setStatus('idle', 'Ready — waiting for hotkey');
 }

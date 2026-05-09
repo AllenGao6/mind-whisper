@@ -12,6 +12,25 @@ const store = new Store({
     keycode: 3640,
     keycodeLabel: 'Right Option',
     history: [],
+    formatterEnabled: false,
+    formatterActivePresetId: 'email',
+    formatterPresets: [
+      {
+        id: 'email',
+        name: 'Email',
+        prompt: 'Reformat the following dictation as a clear, polite email body. Fix grammar and punctuation. Do not add a subject line, greeting, or signature unless I explicitly dictated one. Output only the email text.',
+      },
+      {
+        id: 'slack',
+        name: 'Slack',
+        prompt: 'Reformat the following dictation as a casual but clear Slack message. Fix grammar and punctuation. Keep it concise and conversational. Output only the message text.',
+      },
+      {
+        id: 'bullets',
+        name: 'Bullet points',
+        prompt: 'Reformat the following dictation as concise bullet points. One idea per bullet. Use a leading "- " for each bullet. Fix grammar and punctuation. Output only the bullets, no preamble.',
+      },
+    ],
   },
 });
 
@@ -79,13 +98,36 @@ function createTray() {
   updateTrayMenu('Idle');
 }
 
+function notifyFormatterChanged() {
+  if (!mainWindow) return;
+  mainWindow.webContents.send('formatter-state-changed', {
+    enabled: !!store.get('formatterEnabled'),
+    activePresetId: store.get('formatterActivePresetId'),
+  });
+}
+
 function updateTrayMenu(status) {
   const keybindLabel = store.get('keycodeLabel') || getKeyName(store.get('keycode'));
+  const formatterEnabled = !!store.get('formatterEnabled');
+  const active = getActiveFormatterPreset();
+  const formatterLabel = formatterEnabled && active
+    ? `Formatter: ${active.name}`
+    : 'Formatter: Off';
+
   const contextMenu = Menu.buildFromTemplate([
     { label: `Status: ${status}`, enabled: false },
     { label: `Hotkey: ${keybindLabel}`, enabled: false },
+    {
+      label: formatterLabel,
+      click: () => {
+        store.set('formatterEnabled', !formatterEnabled);
+        updateTrayMenu('Idle');
+        notifyFormatterChanged();
+      },
+    },
     { type: 'separator' },
     { label: 'Settings', click: () => showWindow('settings') },
+    { label: 'Formatter', click: () => showWindow('formatter') },
     { label: 'History', click: () => showWindow('history') },
     { type: 'separator' },
     { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } },
@@ -140,6 +182,26 @@ function pasteText(text) {
   exec('osascript -e \'tell application "System Events" to keystroke "v" using command down\'');
 }
 
+async function formatText(rawText, openai, prompt) {
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4.1-mini',
+    messages: [
+      { role: 'system', content: prompt },
+      { role: 'user', content: rawText },
+    ],
+  });
+  const out = completion.choices?.[0]?.message?.content?.trim();
+  if (!out) throw new Error('Empty formatter response');
+  return out;
+}
+
+function getActiveFormatterPreset() {
+  const presets = store.get('formatterPresets') || [];
+  if (presets.length === 0) return null;
+  const activeId = store.get('formatterActivePresetId');
+  return presets.find((p) => p.id === activeId) || presets[0];
+}
+
 function addToHistory(text) {
   const history = store.get('history') || [];
   history.unshift({ text, timestamp: Date.now() });
@@ -166,11 +228,31 @@ ipcMain.handle('transcribe', async (_event, arrayBuffer) => {
       file: fs.createReadStream(tmpPath),
     });
 
-    pasteText(result.text);
-    addToHistory(result.text);
+    let finalText = result.text;
+    if (store.get('formatterEnabled')) {
+      const active = getActiveFormatterPreset();
+      if (active && active.prompt && active.prompt.trim()) {
+        updateTrayMenu('Formatting...');
+        if (mainWindow) mainWindow.webContents.send('formatting-started');
+        try {
+          finalText = await formatText(result.text, openai, active.prompt);
+        } catch (err) {
+          if (Notification.isSupported()) {
+            new Notification({
+              title: 'MindWhisper — Formatter failed',
+              body: 'Pasted raw transcript instead. ' + (err.message || ''),
+            }).show();
+          }
+          finalText = result.text;
+        }
+      }
+    }
+
+    pasteText(finalText);
+    addToHistory(finalText);
     updateTrayMenu('Idle');
 
-    return { text: result.text };
+    return { text: finalText };
   } catch (err) {
     updateTrayMenu('Error');
     setTimeout(() => updateTrayMenu('Idle'), 3000);
@@ -218,6 +300,20 @@ ipcMain.handle('clear-history', () => {
 
 ipcMain.on('set-keybind-mode', (_event, enabled) => {
   keybindMode = enabled;
+});
+
+ipcMain.handle('get-formatter-config', () => ({
+  enabled: store.get('formatterEnabled'),
+  activePresetId: store.get('formatterActivePresetId'),
+  presets: store.get('formatterPresets') || [],
+}));
+
+ipcMain.handle('save-formatter-config', (_event, cfg) => {
+  if (cfg && cfg.enabled !== undefined) store.set('formatterEnabled', !!cfg.enabled);
+  if (cfg && cfg.activePresetId !== undefined) store.set('formatterActivePresetId', cfg.activePresetId);
+  if (cfg && Array.isArray(cfg.presets)) store.set('formatterPresets', cfg.presets);
+  updateTrayMenu('Idle');
+  return true;
 });
 
 // App lifecycle
