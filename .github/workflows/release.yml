@@ -30,6 +30,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Pre-flight — verify all signing secrets are present
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MAC_CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        run: |
+          missing=0
+          check() {
+            if [ -z "${!1}" ]; then
+              echo "::error::Missing required secret: $1"
+              missing=$((missing + 1))
+            else
+              # Print length only, never the value — GitHub redacts the value anyway, but length is harmless.
+              echo "  ✓ $1 set (length: ${#1})"
+            fi
+          }
+          check APPLE_ID
+          check APPLE_APP_SPECIFIC_PASSWORD
+          check APPLE_TEAM_ID
+          check MAC_CERTIFICATE_P12_BASE64
+          check MAC_CERTIFICATE_PASSWORD
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing required secret(s) are missing. Set them at Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "All 5 signing secrets are present — proceeding with sign + notarize."
+
       - name: Decode Developer ID Application certificate
         env:
           MAC_CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
