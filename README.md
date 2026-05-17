@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="build/icon.png" alt="MindWhisper" width="160" height="160" />
+  <img src="asset/icon.png" alt="MindWhisper" width="160" height="160" />
   <h1>MindWhisper</h1>
   <p><strong>Hold-to-talk dictation for macOS.</strong> Press a key, speak, release — your words appear at the cursor.</p>
   <p>
