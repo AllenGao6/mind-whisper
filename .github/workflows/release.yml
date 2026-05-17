@@ -86,6 +86,33 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx electron-builder --mac --publish always
 
+      - name: Upload generic-name aliases (always-latest download URLs)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd dist
+          # Copy the versioned DMGs to stable names so the landing page can link to
+          # https://github.com/AllenGao6/mind-whisper/releases/latest/download/MindWhisper-<arch>.dmg
+          # and always get the newest installer.
+          for arch in arm64 x64; do
+            src=$(ls MindWhisper-*-${arch}.dmg 2>/dev/null | head -n 1)
+            if [ -n "$src" ]; then
+              cp "$src" "MindWhisper-${arch}.dmg"
+              echo "Aliased $src → MindWhisper-${arch}.dmg"
+            fi
+          done
+          # Intel x64 fallback (electron-builder may omit the arch suffix for x64)
+          if [ ! -f MindWhisper-x64.dmg ]; then
+            src=$(ls MindWhisper-*.dmg | grep -v arm64 | head -n 1 || true)
+            if [ -n "$src" ]; then
+              cp "$src" "MindWhisper-x64.dmg"
+              echo "Aliased $src → MindWhisper-x64.dmg"
+            fi
+          fi
+          ls MindWhisper-arm64.dmg MindWhisper-x64.dmg 2>/dev/null || true
+          gh release upload "${GITHUB_REF_NAME}" \
+            MindWhisper-arm64.dmg MindWhisper-x64.dmg --clobber || true
+
       - name: Cleanup certificate
         if: always()
         run: rm -f "$RUNNER_TEMP/cert.p12"
