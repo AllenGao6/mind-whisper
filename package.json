@@ -1,6 +1,6 @@
 {
   "name": "mind-whisper",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Hold-to-talk dictation for macOS — global hotkey, OpenAI Whisper, auto-paste at cursor.",
   "main": "main.js",
   "homepage": "https://liveq.ai",
