@@ -1,185 +1,186 @@
-# MindWhisper
-
-> Hold-to-talk dictation for macOS — global hotkey, OpenAI Whisper, auto-paste at your cursor.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
-![Platform: macOS](https://img.shields.io/badge/platform-macOS%2011%2B-blue)
-![Node ≥18](https://img.shields.io/badge/node-%E2%89%A518-brightgreen)
-
-MindWhisper is a tiny menu-bar app that turns your voice into text anywhere in macOS. Hold a key, talk, release — your transcribed text is pasted at the cursor. No browser tab, no second window. Just speak and it's there.
-
-> _Add a screenshot or a short GIF demo here:_ `assets/demo.gif`
-
----
-
-## Features
-
-- **Global hold-to-talk hotkey** — works in any app (Slack, Notes, your IDE, the URL bar).
-- **Auto-paste at cursor** — transcript is dropped exactly where you're typing.
-- **History** — last 200 transcriptions kept locally (no cloud sync).
-- **Local API key storage** — your OpenAI key never leaves your machine.
-- **Menu-bar only** — no Dock clutter; one tray icon, one keyboard shortcut.
-- **Audio cues** — soft chime on start/stop so you know it's listening.
-- **Configurable hotkey** — pick any modifier or function key.
+<div align="center">
+  <img src="build/icon.png" alt="MindWhisper" width="160" height="160" />
+  <h1>MindWhisper</h1>
+  <p><strong>Hold-to-talk dictation for macOS.</strong> Press a key, speak, release — your words appear at the cursor.</p>
+  <p>
+    <a href="https://github.com/AllenGao6/mind-whisper/releases/latest"><img src="https://img.shields.io/github/v/release/AllenGao6/mind-whisper?label=latest&color=5b9bd5" alt="Latest release" /></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License" /></a>
+    <img src="https://img.shields.io/badge/platform-macOS%2011%2B-1E3A5F" alt="macOS 11+" />
+    <img src="https://img.shields.io/badge/electron-33-47848F" alt="Electron 33" />
+  </p>
+</div>
 
 ---
 
-## Requirements
+MindWhisper sits in your menu bar. Hold the configured key in any app — Slack, Gmail, your IDE, Spotlight — talk, release, and the transcript pastes where your cursor is. A small bubble floats next to your cursor while you speak. Your clipboard contents are restored automatically after the paste, so nothing is clobbered.
 
-| Requirement | Why |
-|---|---|
-| **macOS 11 (Big Sur) or newer** | Uses modern `systemPreferences.isTrustedAccessibilityClient` API |
-| **Node.js 18+** and **npm** | Build & run |
-| **Xcode Command Line Tools** | Native build of `uiohook-napi` (`xcode-select --install`) |
-| **An OpenAI API key** | Whisper transcription. Get one at [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
-| **Microphone permission** | Recording audio |
-| **Accessibility permission** | Listening for the global hotkey while another app is focused |
+## Highlights
 
----
+- **Three transcription providers, one click to switch** — OpenAI Whisper, **Deepgram Nova-3** (streaming, lowest latency), and Groq Whisper (fast batch).
+- **Automatic language detection** — Deepgram nova-3 multi-language; Whisper / Groq auto-detect; formatter preserves the original language.
+- **Live floating HUD** near the cursor — audio meter, interim text as you speak, formatted output before paste.
+- **Formatter presets** (Email, Slack, Bullets, or your own) — GPT-4o-mini cleans up the transcript before paste. Streams live into the HUD.
+- **Global chord shortcuts** to toggle the formatter (`Cmd+Shift+F`) and switch presets (`Cmd+Shift+1…9`, `Cmd+Shift+0` to disable). All rebindable.
+- **Clipboard-safe paste** — your previous clipboard contents are restored automatically.
+- **Auto-update** — signed, notarized releases ship via GitHub Releases; the app downloads new versions in the background and offers a one-click install in the menu bar.
+- **Robust by design** — watchdog timers recover from stuck recordings, sleep/wake handling, deferred hotkey changes during recording, never blocks indefinitely on slow networks.
 
-## Quick start (run from source)
+## Install
+
+### From a signed release (recommended)
+
+1. Download the latest `MindWhisper-x.y.z-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel) from the [Releases page](https://github.com/AllenGao6/mind-whisper/releases/latest).
+2. Open the DMG and drag MindWhisper into your Applications folder.
+3. Launch it. macOS will ask for **Accessibility** and **Microphone** permissions on first run — grant both.
+
+### From source
 
 ```bash
-git clone https://github.com/your-org/mind-whisper.git
+git clone https://github.com/AllenGao6/mind-whisper.git
 cd mind-whisper
 npm install
 npm start
 ```
 
-The app launches as a tray icon in the macOS menu bar. Click it → **Settings** → paste your OpenAI API key → **Save**. Then hold your hotkey (default: **Right Option**) anywhere on macOS, talk, and release.
+You'll need **Node.js 18+**, **Xcode Command Line Tools** (`xcode-select --install`) for the native keyboard listener, and at least one provider API key (see below).
 
-> First launch will prompt for **Microphone** and **Accessibility** access. You must grant both for the hotkey-driven recording flow to work. See [macOS permissions](#macos-permissions) below.
+## Configure
 
----
+Click the menu-bar icon → **Settings** to set:
 
-## Configuration
+- **Hold-to-Record Key** (default: Right Option). Click to rebind to any key.
+- **Formatter Shortcuts** — defaults are `Cmd+Shift+F` to toggle, `Cmd+Shift+1…9 / 0` to switch presets. Rebind either with the capture buttons.
 
-All settings live in the app's **Settings** tab:
+Click **Providers** to choose which transcription engine is active and paste your API key(s).
 
-| Setting | Default | Notes |
+| Provider | API key from | Notes |
 |---|---|---|
-| OpenAI API key | _(empty)_ | Stored locally via `electron-store`. Never transmitted except to OpenAI's transcription endpoint. |
-| Hold-to-record key | Right Option | Click the key button and press any key to rebind. Modifier-only keys recommended (Option, Ctrl, Caps Lock, Fn rows). |
+| OpenAI Whisper | [platform.openai.com](https://platform.openai.com/api-keys) | Batch. Universal fallback for streaming-provider failures. |
+| **Deepgram** | [console.deepgram.com](https://console.deepgram.com/) | **WebSocket streaming**, lowest latency. Default streaming choice. |
+| Groq Whisper | [console.groq.com](https://console.groq.com/keys) | Very fast batch. Drop-in alternative when Deepgram isn't an option. |
 
-**Where data is stored.** `electron-store` writes to the standard Electron user-data directory:
+Click **Formatter** to enable post-processing, pick a default preset, or write your own. Custom prompts can be in any language — the formatter is instructed to preserve the input language.
+
+## Daily use
+
+| Action | How |
+|---|---|
+| Dictate | Hold the talk key, speak, release. The bubble next to your cursor shows interim text (Deepgram) or a level meter (batch providers). |
+| Toggle formatter on / off | `Cmd+Shift+F` (rebindable) |
+| Jump to preset 1–9 | `Cmd+Shift+1` … `Cmd+Shift+9` — also enables the formatter |
+| Disable formatter | `Cmd+Shift+0` |
+| Open settings | Click the menu-bar icon → Settings |
+| Install pending update | Click the menu-bar icon → ↑ Install update (appears when available) |
+
+## Permissions
+
+MindWhisper needs three macOS permissions:
+
+1. **Microphone** — to record your voice.
+2. **Accessibility** — to listen for the global hotkey while another app is focused.
+3. **Automation** (System Events) — to send the `Cmd+V` keystroke that pastes the transcript at your cursor. The app triggers this prompt at launch so it doesn't race the first dictation.
+
+If you ever deny one, re-enable it in **System Settings → Privacy & Security**, then fully quit and relaunch.
+
+## How it works
 
 ```
-~/Library/Application Support/MindWhisper/config.json
+Keydown (uiohook-napi)
+       │
+       ▼
+Renderer captures audio via AudioWorklet @ 16 kHz
+       │
+       ├──► PCM frames stream to Deepgram WebSocket  ─── interim partials ──► HUD
+       │
+       │    (or buffered into WAV for OpenAI / Groq batch on stop)
+       │
+Keyup
+       │
+       ▼
+finalizeRecording  →  formatter (gpt-4o-mini stream, optional)
+       │
+       ▼
+safePaste:  snapshot clipboard → write transcript → Cmd+V → restore clipboard
 ```
 
-Delete that file to reset settings and history.
+Source layout:
 
----
+```
+main.js                  Electron main: hotkey, HUD window, provider routing,
+                         clipboard, auto-updater, tray, IPC handlers.
+renderer.js              Settings UI, AudioWorklet capture pipeline.
+hud.html / hud-*.js      Floating cursor-pinned HUD window.
+preload.js               Context bridge — narrow IPC surface.
+transcription/           Provider abstraction: openai, deepgram, groq + factory.
+audio/                   AudioWorklet processor + WAV synthesis.
+clipboard/safe-paste.js  Snapshot → paste → restore.
+migration.js             electron-store schema migrations.
+.github/workflows/       Signed + notarized release pipeline.
+```
 
-## macOS permissions
+## Build & release
 
-MindWhisper needs two permissions. macOS will prompt you on first use, but if you ever deny one, you can re-enable it manually:
-
-1. Open **System Settings** → **Privacy & Security**.
-2. **Microphone**: enable for `MindWhisper` (or `Electron` if you're running from source via `npm start`).
-3. **Accessibility**: enable for the same. _Required_ for the global hotkey listener (`uiohook-napi`).
-
-If you ran `npm start` from a terminal, you may also need to grant Accessibility to your terminal app (Terminal.app, iTerm2, Warp, etc.) — it's the parent process listening for keystrokes.
-
-After granting, **fully quit and relaunch** the app for the new permissions to take effect.
-
----
-
-## Build a distributable `.dmg`
+For local unsigned builds:
 
 ```bash
-npm run build
+npm run build      # builds the DMG, does NOT publish
 ```
 
-This runs `electron-builder` and produces:
-
-```
-dist/mac-arm64/MindWhisper.app
-dist/MindWhisper-1.0.0-arm64.dmg
-```
-
-The default build script applies an **ad-hoc codesign** (`codesign --sign -`), which is fine for personal use and side-loading but will trigger Gatekeeper warnings on other machines. For a public release you'll want a real Apple Developer ID — see the [electron-builder code-signing docs](https://www.electron.build/code-signing).
-
-To build for Intel Macs as well, edit `package.json` → `build.mac.target` to `["dmg"]` with both architectures, or run:
+For signed + notarized releases published to GitHub:
 
 ```bash
-npx electron-builder --mac --x64 --arm64
+npm version patch  # bumps version, commits, tags
+git push --follow-tags
 ```
 
----
+The tag triggers `.github/workflows/release.yml`, which on a macOS runner:
 
-## Architecture
+1. Decodes your Developer ID Application `.p12` from a base64 secret.
+2. Builds DMG + ZIP for `arm64` and `x64`.
+3. Signs with hardened runtime; notarizes via Apple's `notarytool`.
+4. Publishes everything (plus `latest-mac.yml` for the auto-updater) to a draft GitHub Release.
 
-A small, three-file Electron app:
+Required GitHub Actions secrets (`Settings → Secrets and variables → Actions`):
 
-```
-main.js       Electron main process. Tray icon, global hotkey listener
-              (uiohook-napi), OpenAI API calls, electron-store persistence,
-              clipboard + AppleScript paste, IPC handlers.
+| Secret | Where to get it |
+|---|---|
+| `APPLE_ID` | Your Apple Developer email |
+| `APPLE_APP_SPECIFIC_PASSWORD` | appleid.apple.com → App-Specific Passwords |
+| `APPLE_TEAM_ID` | developer.apple.com → Membership Details |
+| `MAC_CERTIFICATE_P12_BASE64` | `base64 -i cert.p12 \| pbcopy` after exporting from Keychain |
+| `MAC_CERTIFICATE_PASSWORD` | The password you set during `.p12` export |
 
-renderer.js   Renderer process. UI logic, mic capture via Web Audio API,
-              MediaRecorder → WebM, IPC to main for transcription.
-
-preload.js    Context bridge — exposes a small whitelist of IPC methods
-              under window.electronAPI to the renderer.
-
-index.html    Single-page UI: Settings tab + History tab + status bar.
-```
-
-**IPC events** (renderer → main, defined in `preload.js`):
-
-| Channel | Direction | Purpose |
-|---|---|---|
-| `transcribe` | invoke | Send audio buffer, receive transcribed text |
-| `get-settings` / `save-settings` | invoke | Read/write config |
-| `get-history` / `clear-history` | invoke | Read/clear transcription history |
-| `set-keybind-mode` | send | Toggle "next keypress is the new hotkey" mode |
-| `start-recording` / `stop-recording` / `cancel-recording` | on (main → renderer) | Hotkey state changes |
-| `keybind-captured` | on (main → renderer) | New hotkey pressed during rebind |
-| `switch-tab` | on (main → renderer) | Tray menu requests Settings/History tab |
-
-**Audio path:** Web Audio API → `MediaRecorder` (WebM/Opus) → `ArrayBuffer` over IPC → temp file → OpenAI `whisper-1` → `clipboard.writeText` → AppleScript `keystroke "v" using command down`.
-
----
+`GITHUB_TOKEN` is provided automatically by GitHub Actions.
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Hotkey doesn't fire | Accessibility permission missing | System Settings → Privacy & Security → Accessibility → enable for the app (or Terminal/Electron when running from source). Restart app. |
-| "Microphone access denied" in status bar | Mic permission missing | Privacy & Security → Microphone → enable. Restart app. |
-| `401` from OpenAI | Bad/expired API key | Re-enter key in Settings. Test it at [platform.openai.com](https://platform.openai.com/) first. |
-| `npm install` fails on `uiohook-napi` | Xcode CLT missing | `xcode-select --install` then retry. |
-| Pasted text has no leading capital / strange punctuation | That's how Whisper transcribes raw audio | Speak more clearly, or build a post-processing step (PRs welcome). |
-| Tray icon missing on launch | App is hidden but running | Check the menu bar near the top-right. If still missing, `pkill -f MindWhisper` and relaunch. |
-
----
+| Hotkey doesn't fire | Accessibility permission missing | System Settings → Privacy & Security → Accessibility → enable for MindWhisper (or your terminal app, when running from source). Quit and relaunch. |
+| First paste does nothing after install | macOS Automation permission dialog raced the keystroke | Grant System Events automation when prompted at launch; subsequent pastes work. |
+| Transcript appears in clipboard but doesn't paste | Automation permission denied | System Settings → Privacy & Security → Automation → MindWhisper → enable "System Events". |
+| Recording stuck on "Transcribing…" | Stalled network call | The watchdog auto-recovers within ~25–60 s and notifies. If it persists, restart the app. |
+| HUD bubble doesn't appear | macOS reset its always-on-top flag during sleep | Bubble re-creates itself on next recording; if not, restart the app. |
+| `npm install` fails on `uiohook-napi` | Xcode CLT missing | `xcode-select --install`, then retry. |
+| Auto-update never fires | Running from source, or running an unsigned build | Auto-updater only runs in signed packaged builds. Install via DMG. |
 
 ## Contributing
 
-Issues and pull requests are welcome.
-
-For non-trivial changes, please open an issue first to discuss what you'd like to change. Keep PRs focused — one feature or one fix per PR.
-
-To work on the app locally:
+PRs welcome for bug fixes and small features. For larger work, please open an issue first — keeping this app small and focused is a feature.
 
 ```bash
-git clone https://github.com/your-org/mind-whisper.git
+git clone https://github.com/AllenGao6/mind-whisper.git
 cd mind-whisper
 npm install
-npm start
+npm start          # launch in dev mode (auto-update disabled)
 ```
 
-There's no test suite yet; manual smoke test via `npm start` is the current bar.
-
----
+There's no test suite yet; manual smoke test via the matrix in `verification` sections of the plan files is the current bar.
 
 ## License
 
 [MIT](./LICENSE) — do whatever you want, just keep the copyright notice.
 
----
+## Credits
 
-## Acknowledgments
-
-Crafted by the team at **[liveq.ai](https://liveq.ai)**. Transcription powered by [OpenAI Whisper](https://platform.openai.com/docs/guides/speech-to-text). Global keyboard hooks via [`uiohook-napi`](https://github.com/SnosMe/uiohook-napi). Built on [Electron](https://www.electronjs.org/).
+Crafted by **[liveq.ai](https://liveq.ai)**. Transcription by [OpenAI Whisper](https://platform.openai.com/docs/guides/speech-to-text), [Deepgram](https://deepgram.com/), and [Groq](https://groq.com/). Global keyboard hooks via [`uiohook-napi`](https://github.com/SnosMe/uiohook-napi). Auto-update via [`electron-updater`](https://www.electron.build/auto-update). Built on [Electron](https://www.electronjs.org/).

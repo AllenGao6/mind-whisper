@@ -331,6 +331,25 @@
     }
 
     #keybind-label { font-size: 11px; color: #666; }
+    #chord-toggle-btn, #chord-digit-btn {
+      padding: 8px 16px;
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      min-width: 180px;
+      text-align: center;
+    }
+    #chord-toggle-btn:hover, #chord-digit-btn:hover { border-color: #5b9bd5; }
+    #chord-toggle-btn.listening, #chord-digit-btn.listening {
+      border-color: #ef4444;
+      color: #ef4444;
+      animation: pulse 1s infinite;
+    }
+    .chord-hint { font-size: 11px; color: #666; }
 
     .actions {
       display: flex;
@@ -353,6 +372,10 @@
     .btn-primary:hover { background: #4a8ac4; }
     .btn-danger { background: #3a3a3a; color: #ef4444; }
     .btn-danger:hover { background: #4a2a2a; }
+    .btn:disabled { opacity: 0.6; cursor: default; }
+    .btn.btn-busy { background: #4a4a4a; color: #ddd; }
+    .btn.btn-success { background: #16a34a; color: #fff; }
+    .btn.btn-error { background: #b91c1c; color: #fff; }
 
     #save-msg, #formatter-save-msg {
       font-size: 13px;
@@ -408,6 +431,38 @@
       -webkit-app-region: no-drag;
     }
 
+    /* ── Providers ── */
+    .provider-block {
+      -webkit-app-region: no-drag;
+    }
+    .provider-tag {
+      display: inline-block;
+      font-size: 9px;
+      margin-left: 6px;
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #888;
+      text-transform: lowercase;
+      letter-spacing: 0.3px;
+      font-weight: 500;
+      vertical-align: middle;
+    }
+    .provider-tag.streaming {
+      color: #5b9bd5;
+      background: rgba(91, 155, 213, 0.13);
+    }
+    .provider-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      -webkit-app-region: no-drag;
+    }
+    .provider-status {
+      font-size: 12px;
+      color: #888;
+    }
+
     /* ── Footer credit ── */
     .footer-credit {
       padding: 8px 20px 10px;
@@ -431,6 +486,7 @@
     <h1>MindWhisper</h1>
     <div class="tabs">
       <button class="tab active" data-tab="settings">Settings</button>
+      <button class="tab" data-tab="providers">Providers</button>
       <button class="tab" data-tab="formatter">Formatter</button>
       <button class="tab" data-tab="history">History</button>
     </div>
@@ -441,11 +497,6 @@
     <div class="status-bar">
       <div id="status-dot" class="status-dot"></div>
       <span id="status">Initializing...</span>
-    </div>
-
-    <div class="field">
-      <label>OpenAI API Key</label>
-      <input type="password" id="api-key" placeholder="sk-..." spellcheck="false" autocomplete="off">
     </div>
 
     <div class="field">
@@ -464,6 +515,98 @@
     <div class="hint">
       Hold the configured key to record your voice. Release to transcribe and paste.
       <br>Grant Microphone and Accessibility permissions in System Settings if prompted.
+      <br>API keys live in the <strong>Providers</strong> tab.
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="editor-title">Formatter Shortcuts</div>
+
+    <div class="field">
+      <label>Toggle formatter on/off</label>
+      <div class="keybind-row">
+        <button id="chord-toggle-btn">Loading…</button>
+        <span class="chord-hint">Click to rebind</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Switch to preset by number</label>
+      <div class="keybind-row">
+        <button id="chord-digit-btn">Loading…</button>
+        <span class="chord-hint">Press &lt;chord&gt;+1…9 for preset, &lt;chord&gt;+0 to disable</span>
+      </div>
+    </div>
+
+    <div class="hint">
+      Global shortcuts also fire in the focused app — if another app uses the same chord, it will still trigger there. Use a chord with at least one modifier (Cmd, Ctrl, Shift, Option) to avoid accidental fires while typing.
+    </div>
+  </div>
+
+  <!-- Providers Tab -->
+  <div id="tab-providers" class="tab-content">
+    <div class="field">
+      <label>Active Transcription Provider</label>
+      <select id="active-provider"></select>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="provider-block">
+      <div class="editor-title">OpenAI Whisper <span class="provider-tag">batch</span></div>
+      <div class="field">
+        <label>API Key</label>
+        <input type="password" id="provider-openai-key" placeholder="sk-..." spellcheck="false" autocomplete="off">
+      </div>
+      <div class="provider-actions">
+        <button id="provider-openai-save" class="btn btn-primary">Save</button>
+        <button id="provider-openai-test" class="btn btn-secondary">Test</button>
+        <span class="provider-status" id="provider-openai-status"></span>
+      </div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="provider-block">
+      <div class="editor-title">Deepgram <span class="provider-tag streaming">streaming</span></div>
+      <div class="field">
+        <label>API Key</label>
+        <input type="password" id="provider-deepgram-key" placeholder="dg-..." spellcheck="false" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Model</label>
+        <select id="provider-deepgram-model">
+          <option value="nova-3">nova-3</option>
+        </select>
+      </div>
+      <div class="provider-actions">
+        <button id="provider-deepgram-save" class="btn btn-primary">Save</button>
+        <button id="provider-deepgram-test" class="btn btn-secondary">Test</button>
+        <span class="provider-status" id="provider-deepgram-status"></span>
+      </div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <div class="provider-block">
+      <div class="editor-title">Groq Whisper <span class="provider-tag">fast batch</span></div>
+      <div class="field">
+        <label>API Key</label>
+        <input type="password" id="provider-groq-key" placeholder="gsk-..." spellcheck="false" autocomplete="off">
+      </div>
+      <div class="provider-actions">
+        <button id="provider-groq-save" class="btn btn-primary">Save</button>
+        <button id="provider-groq-test" class="btn btn-secondary">Test</button>
+        <span class="provider-status" id="provider-groq-status"></span>
+      </div>
+    </div>
+
+    <div style="margin-top: 14px;">
+      <span id="providers-save-msg" style="font-size: 13px; color: #4ade80; opacity: 0; transition: opacity 0.3s;"></span>
+    </div>
+
+    <div class="hint">
+      Deepgram streams transcription over WebSocket — lowest latency. Groq Whisper is batch but very fast. OpenAI Whisper is the universal fallback.
     </div>
   </div>
 
