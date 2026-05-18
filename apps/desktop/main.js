@@ -350,6 +350,12 @@ function showWindow(tab) {
 // ── Tray ──
 
 function createTray() {
+  // Idempotent: if a previous Tray exists, destroy it cleanly before making a new one.
+  // This makes the function safe to call from recreateTray() during sleep/wake recovery.
+  if (tray) {
+    try { if (!tray.isDestroyed()) tray.destroy(); } catch (_) {}
+    tray = null;
+  }
   // macOS menu-bar "template image": pure black on transparent. Filename ending in
   // "Template" makes macOS auto-recolor for light/dark menu bars. We also explicitly
   // call setTemplateImage(true) as a belt-and-suspenders guarantee.
@@ -359,6 +365,14 @@ function createTray() {
   tray = new Tray(image);
   tray.setToolTip('MindWhisper');
   updateTrayMenu('Idle');
+}
+
+// Recreate the tray from scratch. Used to recover from macOS detaching the
+// underlying NSStatusItem after sleep/wake or extended idle (a known Electron-on-
+// macOS quirk where the icon remains visible but clicks no longer open the menu).
+function recreateTray() {
+  console.log('[tray] recreating');
+  createTray();
 }
 
 function notifyFormatterChanged() {
@@ -874,6 +888,13 @@ function checkRecordingHealth() {
     notify('MindWhisper', 'Transcription stalled — reset.');
     forceResetRecording('finalize stall > ' + FINALIZE_STALL_MS + 'ms');
   }
+  // Tray self-healing: if the JS-side tray got destroyed somehow, rebuild.
+  // (This won't catch the more common case where macOS detaches the NSStatusItem
+  // natively — that's handled in onResume — but it covers edge cases.)
+  if (!tray || tray.isDestroyed()) {
+    console.warn('[watchdog] tray missing/destroyed, recreating');
+    recreateTray();
+  }
 }
 
 // ── IPC Handlers ──
@@ -1098,12 +1119,15 @@ function setupAutoUpdater() {
   });
 
   // Initial check 30s after launch — give the user time to grant Accessibility, etc.
-  setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), UPDATE_INITIAL_DELAY_MS);
+  // Wrap in withTimeout(30s) so a hanging GitHub fetch can't leak sockets indefinitely
+  // over days of uptime.
+  setTimeout(() => {
+    withTimeout(autoUpdater.checkForUpdates(), 30_000, 'update check').catch(() => {});
+  }, UPDATE_INITIAL_DELAY_MS);
   // Recurring check every 4 hours.
-  updateCheckIntervalId = setInterval(
-    () => autoUpdater.checkForUpdates().catch(() => {}),
-    UPDATE_CHECK_INTERVAL_MS
-  );
+  updateCheckIntervalId = setInterval(() => {
+    withTimeout(autoUpdater.checkForUpdates(), 30_000, 'update check').catch(() => {});
+  }, UPDATE_CHECK_INTERVAL_MS);
 }
 
 function checkForUpdatesManual() {
@@ -1116,7 +1140,7 @@ function checkForUpdatesManual() {
     installUpdateNow();
     return;
   }
-  autoUpdater.checkForUpdates().catch((err) => {
+  withTimeout(autoUpdater.checkForUpdates(), 30_000, 'update check').catch((err) => {
     notify('MindWhisper — Update check failed', err.message || String(err));
   });
 }
@@ -1218,6 +1242,10 @@ function onSleepOrLock() {
 }
 
 function onResume() {
+  // macOS commonly detaches the NSStatusItem's event responder during sleep/lock —
+  // the icon stays in the menu bar but clicks stop opening the menu. Force a fresh
+  // tray so clicks reliably work after wake / unlock.
+  recreateTray();
   // macOS may have reset HUD window flags during sleep — re-applied lazily by showHud on next record.
   applyPendingHotkeyRestart();
 }
