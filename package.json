@@ -1,99 +1,20 @@
 {
-  "name": "mind-whisper",
+  "name": "mind-whisper-monorepo",
+  "private": true,
   "version": "1.0.3",
-  "description": "Hold-to-talk dictation for macOS — global hotkey, OpenAI Whisper, auto-paste at cursor.",
-  "main": "main.js",
-  "homepage": "https://liveq.ai",
-  "license": "MIT",
-  "author": {
-    "name": "MindWhisper contributors",
-    "url": "https://liveq.ai"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/AllenGao6/mind-whisper.git"
-  },
-  "keywords": [
-    "electron",
-    "macos",
-    "voice-to-text",
-    "dictation",
-    "transcription",
-    "whisper",
-    "openai",
-    "menu-bar"
-  ],
+  "description": "MindWhisper monorepo — macOS dictation app + marketing landing page.",
   "scripts": {
-    "start": "electron .",
-    "build": "electron-builder --mac --publish never",
-    "release": "electron-builder --mac --publish always"
+    "dev:web": "pnpm --filter web dev",
+    "dev:desktop": "pnpm --filter desktop start",
+    "build:web": "pnpm --filter web build",
+    "build:desktop": "pnpm --filter desktop build",
+    "release:desktop": "pnpm --filter desktop release",
+    "start:web": "pnpm --filter web start",
+    "lint:web": "pnpm --filter web lint"
   },
-  "build": {
-    "appId": "com.mindwhisper.app",
-    "productName": "MindWhisper",
-    "asar": true,
-    "asarUnpack": [
-      "node_modules/uiohook-napi/build/**"
-    ],
-    "mac": {
-      "icon": "build/icon.icns",
-      "category": "public.app-category.productivity",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "notarize": true,
-      "entitlements": "entitlements.plist",
-      "entitlementsInherit": "entitlements.plist",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
-      ]
-    },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "AllenGao6",
-        "repo": "mind-whisper",
-        "releaseType": "release"
-      }
-    ],
-    "files": [
-      "main.js",
-      "preload.js",
-      "renderer.js",
-      "index.html",
-      "hud.html",
-      "hud-preload.js",
-      "hud-renderer.js",
-      "migration.js",
-      "transcription/**",
-      "audio/**",
-      "clipboard/**",
-      "assets/**",
-      "build/icon.*",
-      "node_modules/**"
-    ]
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
   },
-  "dependencies": {
-    "electron-store": "^8.1.0",
-    "electron-updater": "^6.8.3",
-    "openai": "^4.77.0",
-    "uiohook-napi": "^1.5.4",
-    "ws": "^8.20.1"
-  },
-  "devDependencies": {
-    "electron": "^33.2.0",
-    "electron-builder": "^26.8.1"
-  }
+  "packageManager": "pnpm@10.33.0"
 }

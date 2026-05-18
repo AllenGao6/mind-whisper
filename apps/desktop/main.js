@@ -84,6 +84,8 @@ const FINALIZE_STALL_MS = 60_000;       // finalize total budget → force reset
 let updateState = 'idle';               // 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error'
 let updateDownloadedInfo = null;        // info object for the downloaded update; null otherwise
 let pendingUpdateInstall = false;       // if user clicks Install while busy, install after current session
+let installPromptPending = false;       // download finished while user was dictating — show dialog on next idle
+let installDialogOpen = false;          // re-entrancy guard: don't stack modals if update-downloaded re-fires
 let updateCheckIntervalId = null;
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;   // every 4 hours
 const UPDATE_INITIAL_DELAY_MS = 30_000;
@@ -348,6 +350,12 @@ function showWindow(tab) {
 // ── Tray ──
 
 function createTray() {
+  // Idempotent: if a previous Tray exists, destroy it cleanly before making a new one.
+  // This makes the function safe to call from recreateTray() during sleep/wake recovery.
+  if (tray) {
+    try { if (!tray.isDestroyed()) tray.destroy(); } catch (_) {}
+    tray = null;
+  }
   // macOS menu-bar "template image": pure black on transparent. Filename ending in
   // "Template" makes macOS auto-recolor for light/dark menu bars. We also explicitly
   // call setTemplateImage(true) as a belt-and-suspenders guarantee.
@@ -357,6 +365,14 @@ function createTray() {
   tray = new Tray(image);
   tray.setToolTip('MindWhisper');
   updateTrayMenu('Idle');
+}
+
+// Recreate the tray from scratch. Used to recover from macOS detaching the
+// underlying NSStatusItem after sleep/wake or extended idle (a known Electron-on-
+// macOS quirk where the icon remains visible but clicks no longer open the menu).
+function recreateTray() {
+  console.log('[tray] recreating');
+  createTray();
 }
 
 function notifyFormatterChanged() {
@@ -872,6 +888,13 @@ function checkRecordingHealth() {
     notify('MindWhisper', 'Transcription stalled — reset.');
     forceResetRecording('finalize stall > ' + FINALIZE_STALL_MS + 'ms');
   }
+  // Tray self-healing: if the JS-side tray got destroyed somehow, rebuild.
+  // (This won't catch the more common case where macOS detaches the NSStatusItem
+  // natively — that's handled in onResume — but it covers edge cases.)
+  if (!tray || tray.isDestroyed()) {
+    console.warn('[watchdog] tray missing/destroyed, recreating');
+    recreateTray();
+  }
 }
 
 // ── IPC Handlers ──
@@ -1070,20 +1093,19 @@ function setupAutoUpdater() {
     updateTrayMenu('Idle');
   });
 
-  autoUpdater.on('download-progress', (progress) => {
-    // Throttle: only refresh tray every ~10% to avoid menu churn.
-    const pct = Math.floor(progress.percent || 0);
-    if (pct % 10 === 0) updateTrayMenu('Idle');
+  autoUpdater.on('download-progress', (_progress) => {
+    // Intentionally no tray rebuild during download. Menu.buildFromTemplate is
+    // synchronous and ~5–50 ms; rebuilding on every progress tick starves the
+    // main event loop alongside the autoUpdater's network I/O + gzip work,
+    // which the user perceives as the app freezing. State doesn't change here,
+    // so there's nothing to repaint.
   });
 
   autoUpdater.on('update-downloaded', (info) => {
     updateState = 'downloaded';
     updateDownloadedInfo = info;
-    updateTrayMenu('Idle');
-    notify(
-      'MindWhisper — Update ready',
-      `v${info.version} will install on next quit. Choose "Install update" in the menu bar to apply now.`
-    );
+    updateTrayMenu('Idle');                  // single rebuild — safe
+    promptInstallWhenIdle();                 // show modal dialog (or queue if recording)
   });
 
   autoUpdater.on('error', (err) => {
@@ -1097,12 +1119,15 @@ function setupAutoUpdater() {
   });
 
   // Initial check 30s after launch — give the user time to grant Accessibility, etc.
-  setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), UPDATE_INITIAL_DELAY_MS);
+  // Wrap in withTimeout(30s) so a hanging GitHub fetch can't leak sockets indefinitely
+  // over days of uptime.
+  setTimeout(() => {
+    withTimeout(autoUpdater.checkForUpdates(), 30_000, 'update check').catch(() => {});
+  }, UPDATE_INITIAL_DELAY_MS);
   // Recurring check every 4 hours.
-  updateCheckIntervalId = setInterval(
-    () => autoUpdater.checkForUpdates().catch(() => {}),
-    UPDATE_CHECK_INTERVAL_MS
-  );
+  updateCheckIntervalId = setInterval(() => {
+    withTimeout(autoUpdater.checkForUpdates(), 30_000, 'update check').catch(() => {});
+  }, UPDATE_CHECK_INTERVAL_MS);
 }
 
 function checkForUpdatesManual() {
@@ -1115,7 +1140,7 @@ function checkForUpdatesManual() {
     installUpdateNow();
     return;
   }
-  autoUpdater.checkForUpdates().catch((err) => {
+  withTimeout(autoUpdater.checkForUpdates(), 30_000, 'update check').catch((err) => {
     notify('MindWhisper — Update check failed', err.message || String(err));
   });
 }
@@ -1136,6 +1161,57 @@ function applyPendingUpdateInstall() {
   if (pendingUpdateInstall && !isRecording && finalizingStartedAt === null) {
     pendingUpdateInstall = false;
     installUpdateNow();
+  }
+  // Same trigger point: if the download finished while the user was dictating,
+  // surface the "Install Now / Later" dialog now that they're idle.
+  if (installPromptPending && !isRecording && finalizingStartedAt === null) {
+    showInstallDialog();
+  }
+}
+
+function promptInstallWhenIdle() {
+  if (!updateDownloadedInfo) return;
+  if (installDialogOpen) return;          // a dialog is already in front of the user
+  if (isRecording || finalizingStartedAt !== null) {
+    // Defer until the next idle transition; applyPendingUpdateInstall picks it up.
+    installPromptPending = true;
+    return;
+  }
+  showInstallDialog();
+}
+
+async function showInstallDialog() {
+  if (installDialogOpen) return;          // re-entrancy guard: electron-updater can re-emit update-downloaded
+  if (!updateDownloadedInfo) return;
+  installDialogOpen = true;
+  installPromptPending = false;
+  const v = updateDownloadedInfo.version;
+  // Use null as parent so the dialog is window-modal and reliably focusable
+  // (the mainWindow is usually hidden for this tray-based app, which can cause
+  // sheet-attached dialogs to render oddly or invisibly).
+  try {
+    const result = await dialog.showMessageBox(null, {
+      type: 'info',
+      title: 'Update Ready',
+      message: `MindWhisper ${v} is ready to install.`,
+      detail: 'Install now? You can also install later — the update will apply automatically the next time you quit the app.',
+      buttons: ['Install Now', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (result && result.response === 0) {
+      // Re-check recording state: user could have started dictating between
+      // dismissing the dialog and this microtask resolving. installUpdateNow's
+      // internal check handles it cleanly (queues via pendingUpdateInstall).
+      installUpdateNow();
+    }
+    // "Later" — do nothing. autoInstallOnAppQuit=true means it installs on next quit.
+    // The tray menu's "↑ Install update vX.Y.Z" item is still available as a re-entry point.
+  } catch (err) {
+    console.error('[autoUpdater] install dialog failed:', err && err.message);
+  } finally {
+    installDialogOpen = false;
   }
 }
 
@@ -1166,6 +1242,10 @@ function onSleepOrLock() {
 }
 
 function onResume() {
+  // macOS commonly detaches the NSStatusItem's event responder during sleep/lock —
+  // the icon stays in the menu bar but clicks stop opening the menu. Force a fresh
+  // tray so clicks reliably work after wake / unlock.
+  recreateTray();
   // macOS may have reset HUD window flags during sleep — re-applied lazily by showHud on next record.
   applyPendingHotkeyRestart();
 }

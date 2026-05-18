@@ -1,14 +1,19 @@
 # Dependencies
 node_modules/
+apps/*/node_modules/
 
 # Build output
 dist/
 out/
-# Ignore the contents of build/ (electron-builder uses it as both source and output dir)
+apps/desktop/dist/
+apps/web/.next/
+apps/web/out/
+
+# Ignore the contents of apps/desktop/build/ (electron-builder uses it as both source and output dir)
 # …except for the app icon sources, which must be tracked so CI can pick them up.
-build/*
-!build/icon.icns
-!build/icon.png
+apps/desktop/build/*
+!apps/desktop/build/icon.icns
+!apps/desktop/build/icon.png
 
 # Environment
 .env
@@ -33,3 +38,4 @@ Thumbs.db
 
 # Claude Code local settings
 .claude/settings.local.json
+.gstack/

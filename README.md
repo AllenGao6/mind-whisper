@@ -38,11 +38,11 @@ MindWhisper sits in your menu bar. Hold the configured key in any app — Slack,
 ```bash
 git clone https://github.com/AllenGao6/mind-whisper.git
 cd mind-whisper
-npm install
-npm start
+pnpm install
+pnpm dev:desktop
 ```
 
-You'll need **Node.js 18+**, **Xcode Command Line Tools** (`xcode-select --install`) for the native keyboard listener, and at least one provider API key (see below).
+You'll need **Node.js 20+**, **pnpm 9+**, **Xcode Command Line Tools** (`xcode-select --install`) for the native keyboard listener, and at least one provider API key (see below).
 
 ## Configure
 
@@ -103,33 +103,36 @@ finalizeRecording  →  formatter (gpt-4o-mini stream, optional)
 safePaste:  snapshot clipboard → write transcript → Cmd+V → restore clipboard
 ```
 
-Source layout:
+Repo layout (pnpm monorepo):
 
 ```
-main.js                  Electron main: hotkey, HUD window, provider routing,
+apps/desktop/            Electron app — the product.
+  main.js                Electron main: hotkey, HUD window, provider routing,
                          clipboard, auto-updater, tray, IPC handlers.
-renderer.js              Settings UI, AudioWorklet capture pipeline.
-hud.html / hud-*.js      Floating cursor-pinned HUD window.
-preload.js               Context bridge — narrow IPC surface.
-transcription/           Provider abstraction: openai, deepgram, groq + factory.
-audio/                   AudioWorklet processor + WAV synthesis.
-clipboard/safe-paste.js  Snapshot → paste → restore.
-migration.js             electron-store schema migrations.
-.github/workflows/       Signed + notarized release pipeline.
+  renderer.js            Settings UI, AudioWorklet capture pipeline.
+  hud.html / hud-*.js    Floating cursor-pinned HUD window.
+  preload.js             Context bridge — narrow IPC surface.
+  transcription/         Provider abstraction: openai, deepgram, groq + factory.
+  audio/                 AudioWorklet processor + WAV synthesis.
+  clipboard/safe-paste.js  Snapshot → paste → restore.
+  migration.js           electron-store schema migrations.
+apps/web/                Next.js 15 + Tailwind landing page (deployed via Vercel).
+.github/workflows/       Signed + notarized release pipeline (desktop only).
 ```
 
 ## Build & release
 
-For local unsigned builds:
+For local unsigned builds of the desktop app:
 
 ```bash
-npm run build      # builds the DMG, does NOT publish
+pnpm build:desktop   # builds the DMG, does NOT publish
 ```
 
 For signed + notarized releases published to GitHub:
 
 ```bash
-npm version patch  # bumps version, commits, tags
+cd apps/desktop
+npm version patch    # bumps version, commits, tags
 git push --follow-tags
 ```
 
@@ -161,7 +164,7 @@ Required GitHub Actions secrets (`Settings → Secrets and variables → Actions
 | Transcript appears in clipboard but doesn't paste | Automation permission denied | System Settings → Privacy & Security → Automation → MindWhisper → enable "System Events". |
 | Recording stuck on "Transcribing…" | Stalled network call | The watchdog auto-recovers within ~25–60 s and notifies. If it persists, restart the app. |
 | HUD bubble doesn't appear | macOS reset its always-on-top flag during sleep | Bubble re-creates itself on next recording; if not, restart the app. |
-| `npm install` fails on `uiohook-napi` | Xcode CLT missing | `xcode-select --install`, then retry. |
+| `pnpm install` fails on `uiohook-napi` | Xcode CLT missing | `xcode-select --install`, then retry. |
 | Auto-update never fires | Running from source, or running an unsigned build | Auto-updater only runs in signed packaged builds. Install via DMG. |
 
 ## Contributing
@@ -171,8 +174,9 @@ PRs welcome for bug fixes and small features. For larger work, please open an is
 ```bash
 git clone https://github.com/AllenGao6/mind-whisper.git
 cd mind-whisper
-npm install
-npm start          # launch in dev mode (auto-update disabled)
+pnpm install
+pnpm dev:desktop   # launch the Electron app in dev mode (auto-update disabled)
+pnpm dev:web       # launch the landing page at http://localhost:3000
 ```
 
 There's no test suite yet; manual smoke test via the matrix in `verification` sections of the plan files is the current bar.

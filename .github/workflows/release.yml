@@ -2,6 +2,9 @@ name: Release
 
 # Pushing a tag like v1.0.1 triggers: build + sign + notarize + publish to GitHub Releases.
 # The release is created as a draft so you can write release notes before publishing.
+#
+# Monorepo layout: the Electron app lives in apps/desktop. The marketing landing
+# page (apps/web) is deployed separately via Vercel and is not built here.
 on:
   push:
     tags:
@@ -21,14 +24,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies (workspace root)
+        run: pnpm install --frozen-lockfile
 
       - name: Pre-flight — verify all signing secrets are present
         env:
@@ -84,13 +92,14 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npx electron-builder --mac --publish always
+        # Build is scoped to the desktop workspace; output lands in apps/desktop/dist.
+        run: pnpm --filter desktop exec electron-builder --mac --publish always
 
       - name: Upload generic-name aliases (always-latest download URLs)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd dist
+          cd apps/desktop/dist
           # Copy the versioned DMGs to stable names so the landing page can link to
           # https://github.com/AllenGao6/mind-whisper/releases/latest/download/MindWhisper-<arch>.dmg
           # and always get the newest installer.
