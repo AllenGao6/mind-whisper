@@ -206,6 +206,8 @@ async function startCapture(recId) {
   };
 
   const buf = new Uint8Array(analyserNode.frequencyBinCount);
+  // 10 Hz is plenty for a 6-bar level meter; 20 Hz was saturating the HUD IPC queue
+  // and the meter visibly slowed down the longer the recording lasted.
   levelTimerId = setInterval(() => {
     if (!isRecording || !analyserNode || currentRecordingId !== recId) return;
     analyserNode.getByteFrequencyData(buf);
@@ -213,7 +215,7 @@ async function startCapture(recId) {
     for (let i = 0; i < buf.length; i++) sum += buf[i];
     const avg = sum / buf.length / 255;
     window.electronAPI.sendAudioLevel(Math.min(1, avg * 2.5), recId);
-  }, 50);
+  }, 100);
 
   // If stop fired while we were still setting up, tear down immediately.
   if (!isRecording || currentRecordingId !== recId) {

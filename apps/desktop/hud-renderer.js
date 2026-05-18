@@ -40,8 +40,31 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-window.hudAPI.onUpdate((payload) => {
+// RAF-coalesced render loop: IPC updates from main can arrive faster than we can paint
+// (especially the 10 Hz audio-level stream plus 5–10 Hz Deepgram partials). Instead of
+// repainting on every IPC, we stash the latest payload and let the browser's animation
+// frame drive a single paint. Old payloads are dropped — we always render the freshest
+// state, so no backlog can accumulate over time.
+let latestPayload = null;
+let rafId = null;
+
+function scheduleRender(payload) {
   if (!payload) return;
+  latestPayload = payload;
+  if (rafId === null) {
+    rafId = requestAnimationFrame(renderLatest);
+  }
+}
+
+function renderLatest() {
+  rafId = null;
+  const payload = latestPayload;
+  latestPayload = null;
+  if (!payload) return;
+  applyPayload(payload);
+}
+
+function applyPayload(payload) {
   switch (payload.phase) {
     case 'recording':
       setDotState('recording');
@@ -63,7 +86,6 @@ window.hudAPI.onUpdate((payload) => {
     case 'transcribing':
       setDotState('transcribing');
       labelText.textContent = 'Transcribing…';
-      // keep meter drained
       drawMeter(0);
       break;
     case 'formatting':
@@ -95,4 +117,6 @@ window.hudAPI.onUpdate((payload) => {
       drawMeter(0);
       break;
   }
-});
+}
+
+window.hudAPI.onUpdate(scheduleRender);

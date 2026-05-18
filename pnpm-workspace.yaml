@@ -1,0 +1,12 @@
+packages:
+  - 'apps/*'
+
+# Native modules and electron-builder need their install scripts to run.
+# pnpm 10 requires explicit allow-listing.
+onlyBuiltDependencies:
+  - electron
+  - electron-builder
+  - uiohook-napi
+  - '@parcel/watcher'
+  - esbuild
+  - sharp

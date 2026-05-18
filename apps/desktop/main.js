@@ -84,6 +84,8 @@ const FINALIZE_STALL_MS = 60_000;       // finalize total budget → force reset
 let updateState = 'idle';               // 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error'
 let updateDownloadedInfo = null;        // info object for the downloaded update; null otherwise
 let pendingUpdateInstall = false;       // if user clicks Install while busy, install after current session
+let installPromptPending = false;       // download finished while user was dictating — show dialog on next idle
+let installDialogOpen = false;          // re-entrancy guard: don't stack modals if update-downloaded re-fires
 let updateCheckIntervalId = null;
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;   // every 4 hours
 const UPDATE_INITIAL_DELAY_MS = 30_000;
@@ -1070,20 +1072,19 @@ function setupAutoUpdater() {
     updateTrayMenu('Idle');
   });
 
-  autoUpdater.on('download-progress', (progress) => {
-    // Throttle: only refresh tray every ~10% to avoid menu churn.
-    const pct = Math.floor(progress.percent || 0);
-    if (pct % 10 === 0) updateTrayMenu('Idle');
+  autoUpdater.on('download-progress', (_progress) => {
+    // Intentionally no tray rebuild during download. Menu.buildFromTemplate is
+    // synchronous and ~5–50 ms; rebuilding on every progress tick starves the
+    // main event loop alongside the autoUpdater's network I/O + gzip work,
+    // which the user perceives as the app freezing. State doesn't change here,
+    // so there's nothing to repaint.
   });
 
   autoUpdater.on('update-downloaded', (info) => {
     updateState = 'downloaded';
     updateDownloadedInfo = info;
-    updateTrayMenu('Idle');
-    notify(
-      'MindWhisper — Update ready',
-      `v${info.version} will install on next quit. Choose "Install update" in the menu bar to apply now.`
-    );
+    updateTrayMenu('Idle');                  // single rebuild — safe
+    promptInstallWhenIdle();                 // show modal dialog (or queue if recording)
   });
 
   autoUpdater.on('error', (err) => {
@@ -1136,6 +1137,57 @@ function applyPendingUpdateInstall() {
   if (pendingUpdateInstall && !isRecording && finalizingStartedAt === null) {
     pendingUpdateInstall = false;
     installUpdateNow();
+  }
+  // Same trigger point: if the download finished while the user was dictating,
+  // surface the "Install Now / Later" dialog now that they're idle.
+  if (installPromptPending && !isRecording && finalizingStartedAt === null) {
+    showInstallDialog();
+  }
+}
+
+function promptInstallWhenIdle() {
+  if (!updateDownloadedInfo) return;
+  if (installDialogOpen) return;          // a dialog is already in front of the user
+  if (isRecording || finalizingStartedAt !== null) {
+    // Defer until the next idle transition; applyPendingUpdateInstall picks it up.
+    installPromptPending = true;
+    return;
+  }
+  showInstallDialog();
+}
+
+async function showInstallDialog() {
+  if (installDialogOpen) return;          // re-entrancy guard: electron-updater can re-emit update-downloaded
+  if (!updateDownloadedInfo) return;
+  installDialogOpen = true;
+  installPromptPending = false;
+  const v = updateDownloadedInfo.version;
+  // Use null as parent so the dialog is window-modal and reliably focusable
+  // (the mainWindow is usually hidden for this tray-based app, which can cause
+  // sheet-attached dialogs to render oddly or invisibly).
+  try {
+    const result = await dialog.showMessageBox(null, {
+      type: 'info',
+      title: 'Update Ready',
+      message: `MindWhisper ${v} is ready to install.`,
+      detail: 'Install now? You can also install later — the update will apply automatically the next time you quit the app.',
+      buttons: ['Install Now', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (result && result.response === 0) {
+      // Re-check recording state: user could have started dictating between
+      // dismissing the dialog and this microtask resolving. installUpdateNow's
+      // internal check handles it cleanly (queues via pendingUpdateInstall).
+      installUpdateNow();
+    }
+    // "Later" — do nothing. autoInstallOnAppQuit=true means it installs on next quit.
+    // The tray menu's "↑ Install update vX.Y.Z" item is still available as a re-entry point.
+  } catch (err) {
+    console.error('[autoUpdater] install dialog failed:', err && err.message);
+  } finally {
+    installDialogOpen = false;
   }
 }
 
