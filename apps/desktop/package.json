@@ -1,6 +1,6 @@
 {
   "name": "desktop",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "MindWhisper — hold-to-talk dictation for macOS. Global hotkey, multiple providers, auto-paste at cursor.",
   "main": "main.js",
   "homepage": "https://liveq.ai",
