@@ -60,6 +60,10 @@
         }
       ]
     },
+    "dmg": {
+      "background": null,
+      "icon": null
+    },
     "publish": [
       {
         "provider": "github",
@@ -80,13 +84,13 @@
       "transcription/**",
       "audio/**",
       "clipboard/**",
+      "lib/**",
       "assets/**",
       "build/icon.*",
       "node_modules/**"
     ]
   },
   "dependencies": {
-    "electron-store": "^8.1.0",
     "electron-updater": "^6.8.3",
     "openai": "^4.77.0",
     "uiohook-napi": "^1.5.4",

@@ -4,7 +4,7 @@ const { exec } = require('child_process');
 const { app, BrowserWindow, Tray, Menu, ipcMain, dialog, Notification, systemPreferences, screen, powerMonitor, nativeImage } = require('electron');
 const { uIOhook } = require('uiohook-napi');
 const OpenAI = require('openai');
-const Store = require('electron-store');
+const Store = require('./lib/store');
 const { autoUpdater } = require('electron-updater');
 const { runMigrations } = require('./migration');
 const transcription = require('./transcription');
@@ -861,6 +861,19 @@ async function formatTextStreaming(rawText, openaiKey, prompt, ownToken) {
 // ── Force-reset paths (watchdog, powerMonitor, renderer cancel) ──
 
 function forceResetRecording(reason) {
+  // Idempotency guard: nothing to reset and (critically) avoid a feedback loop.
+  // Without this, the flow was:
+  //   forceReset → send 'cancel-recording' IPC to renderer → renderer responds
+  //   with 'recording-cancelled' → handler calls forceReset → infinite
+  //   [reset] renderer cancel spam on rapid talk-key taps.
+  const alreadyIdle =
+    !isRecording &&
+    !currentSession &&
+    finalizingStartedAt === null &&
+    !currentRecordingId &&
+    !recordingHardCapId;
+  if (alreadyIdle) return;
+
   if (reason) console.warn('[reset]', reason);
   isRecording = false;
   if (recordingHardCapId) { clearTimeout(recordingHardCapId); recordingHardCapId = null; }
@@ -927,6 +940,11 @@ ipcMain.on('recording-cancelled', (_event, payload) => {
   const id = payload && payload.id;
   // Allow cancellation only if id matches or is absent (defensive).
   if (id && currentRecordingId && id !== currentRecordingId) return;
+  // Bail if we're already idle. forceResetRecording also guards this, but
+  // returning here keeps the "nothing happened" path silent — no log noise.
+  if (!isRecording && !currentSession && finalizingStartedAt === null && !currentRecordingId) {
+    return;
+  }
   forceResetRecording('renderer cancel');
 });
 
