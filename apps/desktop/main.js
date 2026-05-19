@@ -361,9 +361,28 @@ function createTray() {
   // call setTemplateImage(true) as a belt-and-suspenders guarantee.
   const iconPath = path.join(__dirname, 'assets', 'trayTemplate.png');
   const image = nativeImage.createFromPath(iconPath);
+  if (image.isEmpty()) {
+    console.error('[tray] icon image empty — path missing or unreadable:', iconPath);
+  }
   if (process.platform === 'darwin') image.setTemplateImage(true);
   tray = new Tray(image);
   tray.setToolTip('MindWhisper');
+
+  // Attach a guaranteed-working minimal menu IMMEDIATELY. If the rich
+  // updateTrayMenu() throws on first build (fresh-install state, race with
+  // migrations, unexpected store value), the tray still responds with at least
+  // Settings + Quit. updateTrayMenu replaces this on success.
+  try {
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: `MindWhisper v${app.getVersion()}`, enabled: false },
+      { type: 'separator' },
+      { label: 'Settings', click: () => showWindow('settings') },
+      { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } },
+    ]));
+  } catch (err) {
+    console.error('[tray] fallback menu attach failed:', err && err.message);
+  }
+
   updateTrayMenu('Idle');
 }
 
@@ -387,6 +406,7 @@ function notifyFormatterChanged() {
 
 function updateTrayMenu(status) {
   if (!tray) return;
+  try {
   const keybindLabel = store.get('keycodeLabel') || getKeyName(store.get('keycode'));
   const formatterEnabled = !!store.get('formatterEnabled');
   const active = getActiveFormatterPreset();
@@ -441,6 +461,12 @@ function updateTrayMenu(status) {
   );
 
   tray.setContextMenu(Menu.buildFromTemplate(template));
+  } catch (err) {
+    // The previously-attached menu (the safe minimum from createTray, or the
+    // last successful dynamic build) remains in place. Settings + Quit still
+    // work, so the tray never becomes a dead icon.
+    console.error('[tray] updateTrayMenu failed:', err && (err.stack || err.message));
+  }
 }
 
 // ── Hotkey listeners ──
@@ -1272,12 +1298,26 @@ function onResume() {
 
 app.whenReady().then(() => {
   if (process.platform === 'darwin') {
-    app.dock.hide();
+    // Lock the app into accessory mode BEFORE the tray's NSStatusItem is
+    // registered. Combined with `LSUIElement: true` in Info.plist
+    // (build.mac.extendInfo), the app is born without a dock icon and never
+    // appears in Cmd+Tab — closing the activation-policy race that was leaving
+    // tray click handlers unbound on signed builds.
+    app.setActivationPolicy('accessory');
   }
+
+  console.log(`[boot] MindWhisper v${app.getVersion()} ready — platform=${process.platform} userData=${app.getPath('userData')}`);
 
   createWindow();
   createHudWindow();
   createTray();
+
+  // One-shot delayed re-attach: after migrations and any async startup work
+  // have settled, rebuild the tray menu so the user sees the rich version even
+  // if the first build inside createTray() ran against partial state.
+  setTimeout(() => {
+    if (tray && !tray.isDestroyed()) updateTrayMenu('Idle');
+  }, 1500);
 
   if (process.platform === 'darwin') {
     const trusted = systemPreferences.isTrustedAccessibilityClient(true);

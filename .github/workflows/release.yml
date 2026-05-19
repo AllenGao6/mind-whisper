@@ -96,6 +96,53 @@ jobs:
         # Build is scoped to the desktop workspace; output lands in apps/desktop/dist.
         run: pnpm --filter desktop exec electron-builder --mac --publish always
 
+      - name: Audit signed Info.plist — LSUIElement present
+        # Fails the release if LSUIElement isn't baked into the signed app.
+        # Without it, the dock icon flashes at launch and the activation-policy
+        # race can leave the tray click handler unbound on first launch.
+        run: |
+          plist="$PWD/apps/desktop/dist/mac-arm64/MindWhisper.app/Contents/Info.plist"
+          val=$(defaults read "$plist" LSUIElement 2>/dev/null || echo "MISSING")
+          if [ "$val" != "1" ] && [ "$val" != "YES" ] && [ "$val" != "true" ]; then
+            echo "::error::LSUIElement missing in signed Info.plist (got: $val)"
+            exit 1
+          fi
+          echo "  ✓ LSUIElement=$val"
+
+      - name: Audit signed asar — required files present, no electron-store
+        run: |
+          cd apps/desktop/dist/mac-arm64/MindWhisper.app/Contents/Resources
+          npx --yes @electron/asar list app.asar > /tmp/rel-asar.list
+          fail=0
+          for f in "/main.js" "/lib/store.js" "/assets/trayTemplate.png" "/assets/trayTemplate@2x.png" "/assets/trayTemplate@3x.png" "/migration.js"; do
+            if ! grep -qx "$f" /tmp/rel-asar.list; then
+              echo "::error::missing from release app.asar: $f"
+              fail=1
+            fi
+          done
+          if grep -qx "/node_modules/electron-store" /tmp/rel-asar.list; then
+            echo "::error::electron-store back in release asar"
+            fail=1
+          fi
+          exit $fail
+
+      - name: Audit signed DMG — no visible dotfiles
+        run: |
+          cd apps/desktop/dist
+          dmg=$(ls MindWhisper-*-arm64.dmg | head -n 1)
+          hdiutil attach -nobrowse -readonly "$dmg" -mountpoint /tmp/rel-dmg
+          ls -la /tmp/rel-dmg
+          forbidden=(".background.tiff" ".background.png" ".VolumeIcon.icns")
+          fail=0
+          for f in "${forbidden[@]}"; do
+            if [ -e "/tmp/rel-dmg/$f" ]; then
+              echo "::error::forbidden file in release DMG: $f"
+              fail=1
+            fi
+          done
+          hdiutil detach /tmp/rel-dmg
+          exit $fail
+
       - name: Upload generic-name aliases (always-latest download URLs)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

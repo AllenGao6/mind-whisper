@@ -43,6 +43,9 @@
       "notarize": true,
       "entitlements": "entitlements.plist",
       "entitlementsInherit": "entitlements.plist",
+      "extendInfo": {
+        "LSUIElement": true
+      },
       "target": [
         {
           "target": "dmg",
@@ -61,7 +64,7 @@
       ]
     },
     "dmg": {
-      "background": null,
+      "backgroundColor": "#ffffff",
       "icon": null
     },
     "publish": [

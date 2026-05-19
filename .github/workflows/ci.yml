@@ -1,0 +1,146 @@
+name: CI
+
+# Runs on every push to main and every PR. Builds an unsigned macOS package
+# (no certs needed) and runs four content-validation steps so regressions like:
+#   - missing modules (Cannot find module 'p-limit')
+#   - LSUIElement dropped from Info.plist
+#   - .background.tiff / .VolumeIcon.icns leaking into the DMG
+#   - tray icon failing to load from asar
+#   - updateTrayMenu throwing at boot
+# all FAIL THE PR before they can ever ship to users.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate-desktop-build:
+    name: Build + audit asar + audit DMG + smoke-test boot (macOS, unsigned)
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    env:
+      # Build unsigned in CI — no notarization, no certs needed. Safe for fork PRs.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Syntax check (main process)
+        # Catches typos and require() errors before electron-builder even runs.
+        run: node --check apps/desktop/main.js
+
+      - name: Build unsigned macOS package
+        run: pnpm --filter desktop exec electron-builder --mac --publish never
+
+      - name: Verify LSUIElement is in Info.plist
+        # Catches accidental removal of the menubar-app marker.
+        run: |
+          plist="$PWD/apps/desktop/dist/mac-arm64/MindWhisper.app/Contents/Info.plist"
+          val=$(defaults read "$plist" LSUIElement 2>/dev/null || echo "MISSING")
+          if [ "$val" != "1" ] && [ "$val" != "YES" ] && [ "$val" != "true" ]; then
+            echo "::error::LSUIElement is not set in Info.plist (got: $val) — app will show a dock icon"
+            exit 1
+          fi
+          echo "  ✓ LSUIElement=$val"
+
+      - name: Audit asar — required files must be present
+        run: |
+          cd apps/desktop/dist/mac-arm64/MindWhisper.app/Contents/Resources
+          npx --yes @electron/asar list app.asar > /tmp/asar.list
+          required=(
+            "/main.js"
+            "/preload.js"
+            "/migration.js"
+            "/lib/store.js"
+            "/assets/trayTemplate.png"
+            "/assets/trayTemplate@2x.png"
+            "/assets/trayTemplate@3x.png"
+            "/build/icon.icns"
+            "/node_modules/electron-updater/package.json"
+            "/node_modules/openai/package.json"
+            "/node_modules/uiohook-napi/package.json"
+            "/node_modules/ws/package.json"
+          )
+          fail=0
+          for f in "${required[@]}"; do
+            if ! grep -qx "$f" /tmp/asar.list; then
+              echo "::error::missing from app.asar: $f"
+              fail=1
+            else
+              echo "  ✓ $f"
+            fi
+          done
+          if grep -qx "/node_modules/electron-store" /tmp/asar.list; then
+            echo "::error::electron-store sneaked back in — we replaced it with lib/store.js"
+            fail=1
+          fi
+          if grep -qx "/node_modules/p-limit" /tmp/asar.list; then
+            echo "::warning::p-limit present — historically a sign electron-store crept back in"
+          fi
+          exit $fail
+
+      - name: Audit DMG — no visible dotfiles
+        run: |
+          cd apps/desktop/dist
+          dmg=$(ls MindWhisper-*-arm64.dmg | head -n 1)
+          if [ -z "$dmg" ]; then echo "::error::no arm64 DMG built"; exit 1; fi
+          echo "Inspecting $dmg"
+          hdiutil attach -nobrowse -readonly "$dmg" -mountpoint /tmp/ci-dmg
+          ls -la /tmp/ci-dmg
+          forbidden=(".background.tiff" ".background.png" ".VolumeIcon.icns" ".fseventsd")
+          fail=0
+          for f in "${forbidden[@]}"; do
+            if [ -e "/tmp/ci-dmg/$f" ]; then
+              echo "::error::forbidden file in DMG root: $f (size: $(stat -f%z /tmp/ci-dmg/$f 2>/dev/null || echo ?))"
+              fail=1
+            fi
+          done
+          hdiutil detach /tmp/ci-dmg
+          exit $fail
+
+      - name: Smoke-test boot — app must launch cleanly
+        # Headless CI can't render the menu-bar UI, but we can verify the process
+        # boots, prints our [boot] marker, and doesn't emit any of the known
+        # tray/module-resolution failure log lines. This would have caught:
+        #   - v1.0.7's "Cannot find module 'p-limit'" crash
+        #   - any future "tray icon empty" / "updateTrayMenu failed" regression
+        run: |
+          cd apps/desktop/dist/mac-arm64
+          (./MindWhisper.app/Contents/MacOS/MindWhisper > /tmp/boot.log 2>&1 &) ; sleep 8 ; pkill -f MindWhisper || true
+          echo "--- captured boot output ---"
+          cat /tmp/boot.log || true
+          echo "--- end ---"
+          fail=0
+          grep -q "Uncaught Exception"             /tmp/boot.log && { echo "::error::Uncaught Exception during boot"; fail=1; }
+          grep -q "Cannot find module"             /tmp/boot.log && { echo "::error::Module resolution failure"; fail=1; }
+          grep -q "\[tray\] icon image empty"      /tmp/boot.log && { echo "::error::Tray icon failed to load from asar"; fail=1; }
+          grep -q "\[tray\] updateTrayMenu failed" /tmp/boot.log && { echo "::error::Tray menu build threw — Bug B is back"; fail=1; }
+          grep -q "\[boot\] MindWhisper"           /tmp/boot.log || { echo "::error::Never reached app.whenReady — boot stalled"; fail=1; }
+          [ "$fail" = "0" ] && echo "Boot OK: reached whenReady, no exceptions, no module errors, tray initialized cleanly."
+          exit $fail
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-on-failure
+          path: |
+            apps/desktop/dist/*.dmg
+            /tmp/boot.log
+            /tmp/asar.list
+          if-no-files-found: ignore
+          retention-days: 7
