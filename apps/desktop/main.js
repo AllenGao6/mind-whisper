@@ -377,7 +377,7 @@ function createTray() {
       { label: `MindWhisper v${app.getVersion()}`, enabled: false },
       { type: 'separator' },
       { label: 'Settings', click: () => showWindow('settings') },
-      { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } },
+      { label: 'Quit', click: () => gracefulQuit() },
     ]));
   } catch (err) {
     console.error('[tray] fallback menu attach failed:', err && err.message);
@@ -392,6 +392,37 @@ function createTray() {
 function recreateTray() {
   console.log('[tray] recreating');
   createTray();
+}
+
+// Centralized shutdown path used by every Quit affordance.
+//
+// Why this is a separate function rather than inline `app.quit()`:
+//   1. NSStatusItem's context menu runs in a modal Cocoa run loop. Calling
+//      app.quit() synchronously from inside its click callback races AppKit's
+//      menu/status-item teardown and deadlocks on signed builds (the v1.0.11
+//      bug). Deferring with setImmediate lets Cocoa finish dismissing the
+//      menu before Electron starts shutting down.
+//   2. Explicit tray.destroy() releases the NSStatusItem on our terms instead
+//      of leaving it for AppKit to clean up during app exit.
+//   3. Idempotent — safe to call multiple times if the user double-clicks Quit.
+let isQuitInProgress = false;
+function gracefulQuit() {
+  if (isQuitInProgress) return;
+  isQuitInProgress = true;
+  app.isQuitting = true;
+  console.log('[quit] graceful shutdown initiated');
+
+  // Release Cocoa references eagerly so AppKit isn't doing it during quit.
+  try {
+    if (tray && !tray.isDestroyed()) tray.destroy();
+  } catch (_) {}
+  tray = null;
+
+  try { if (hudWindow && !hudWindow.isDestroyed()) hudWindow.hide(); } catch (_) {}
+
+  // Defer so Cocoa's NSMenu modal callback fully unwinds before app.quit()
+  // walks the window list. Without this, the signed-build quit hangs.
+  setImmediate(() => { app.quit(); });
 }
 
 function notifyFormatterChanged() {
@@ -457,7 +488,7 @@ function updateTrayMenu(status) {
     { label: 'Formatter', click: () => showWindow('formatter') },
     { label: 'History', click: () => showWindow('history') },
     { type: 'separator' },
-    { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } }
+    { label: 'Quit', click: () => gracefulQuit() }
   );
 
   tray.setContextMenu(Menu.buildFromTemplate(template));
@@ -1360,16 +1391,44 @@ app.whenReady().then(() => {
   }
 });
 
-app.on('window-all-closed', (e) => {
-  e.preventDefault?.();
+app.on('window-all-closed', () => {
+  // Intentionally a no-op on darwin. With LSUIElement=true we're a proper
+  // accessory app — macOS already keeps the app alive after all windows close
+  // (menubar-app convention). Calling event.preventDefault() here interacted
+  // badly with an in-flight app.quit() on signed v1.0.11, freezing the app
+  // post-Quit. The non-darwin branch is for any future Windows/Linux port.
+  if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('before-quit', () => {
-  if (healthIntervalId) { clearInterval(healthIntervalId); healthIntervalId = null; }
-  if (updateCheckIntervalId) { clearInterval(updateCheckIntervalId); updateCheckIntervalId = null; }
-  try { uIOhook.stop(); } catch {}
+  console.log('[quit] before-quit — cleaning up');
+
+  if (healthIntervalId)         { clearInterval(healthIntervalId);         healthIntervalId = null; }
+  if (updateCheckIntervalId)    { clearInterval(updateCheckIntervalId);    updateCheckIntervalId = null; }
+  if (recordingHardCapId)       { clearTimeout(recordingHardCapId);        recordingHardCapId = null; }
+  if (formatterNoticeHideTimer) { clearTimeout(formatterNoticeHideTimer);  formatterNoticeHideTimer = null; }
+
+  // electron-updater attempts to install any downloaded update on quit. If
+  // nothing is actually downloaded, defang it so the install path doesn't run
+  // with empty/stale state during teardown.
+  try {
+    if (updateState !== 'downloaded') {
+      autoUpdater.autoInstallOnAppQuit = false;
+    }
+  } catch (_) {}
+
+  try { uIOhook.stop(); } catch (_) {}
+
+  // Hard-exit watchdog: if Electron's quit sequence stalls (uiohook native
+  // module hang, renderer zombie, AppKit edge case), force-terminate after 2 s.
+  // .unref() so this timer doesn't itself keep the loop alive.
+  setTimeout(() => {
+    console.warn('[quit] hard exit after 2 s — Electron quit sequence stalled');
+    process.exit(0);
+  }, 2000).unref();
 });
 
 app.on('will-quit', () => {
-  try { uIOhook.stop(); } catch {}
+  console.log('[quit] will-quit');
+  try { uIOhook.stop(); } catch (_) {}
 });
