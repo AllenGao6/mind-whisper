@@ -9,6 +9,7 @@ const { autoUpdater } = require('electron-updater');
 const { runMigrations } = require('./migration');
 const transcription = require('./transcription');
 const openaiWhisper = require('./transcription/openai-whisper');
+const health = require('./transcription/health');
 const { safePaste } = require('./clipboard/safe-paste');
 
 const store = new Store({
@@ -62,6 +63,11 @@ let keybindMode = null;                 // null = off; otherwise { mode: 'talk' 
 // ── Finalize state ──
 let currentSession = null;              // active provider session (recording or finalizing)
 let currentProviderId = null;
+// HUD defer: showHud() runs ~150ms after recording starts so a bare-modifier
+// hotkey (e.g. Cmd) doesn't flash the HUD on every Cmd+C / Cmd+V. Cleared in
+// the sub-500ms cancel path if the user released before the timer fired.
+let currentHudDeferId = null;
+const HUD_SHOW_DELAY_MS = 150;
 let currentInterim = '';
 let currentFinals = [];
 let finalizingStartedAt = null;         // ms when finalize started; null if idle
@@ -89,6 +95,33 @@ let installDialogOpen = false;          // re-entrancy guard: don't stack modals
 let updateCheckIntervalId = null;
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;   // every 4 hours
 const UPDATE_INITIAL_DELAY_MS = 30_000;
+
+// ── Provider health ──
+// In-memory cache is owned by ./transcription/health. These helpers wire the
+// edges that keep it accurate: boot, settings save, sleep/wake, periodic.
+let healthRefreshIntervalId = null;
+const HEALTH_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+// First-press-per-session auto-open: when no provider works, surface Providers
+// once. Subsequent presses just notify (don't be naggy).
+let providersWindowAutoOpened = false;
+
+async function refreshAllProviderHealth() {
+  const providers = store.get('providers') || {};
+  await Promise.all(
+    Object.entries(providers).map(([id, cfg]) =>
+      health.refresh(id, cfg && cfg.apiKey).catch(() => {})
+    )
+  );
+  // The tray label depends on health; refresh it once after a batch probe.
+  try { updateTrayMenu('Idle'); } catch (_) {}
+}
+
+function startHealthRefreshLoop() {
+  if (healthRefreshIntervalId) clearInterval(healthRefreshIntervalId);
+  healthRefreshIntervalId = setInterval(() => {
+    refreshAllProviderHealth().catch(() => {});
+  }, HEALTH_REFRESH_INTERVAL_MS);
+}
 
 const KEY_NAMES = {
   56: 'Left Option', 3640: 'Right Option',
@@ -444,7 +477,23 @@ function updateTrayMenu(status) {
   const formatterLabel = formatterEnabled && active
     ? `Formatter: ${active.name}`
     : 'Formatter: Off';
-  const providerLabel = `Provider: ${getProviderLabel(store.get('activeProvider'))}`;
+  // Provider label diverges when the active provider is known-unhealthy:
+  //   Healthy:  "Provider: Deepgram"
+  //   Fallback: "Provider: Deepgram → OpenAI (failing)"
+  //   No fb:    "Provider: Deepgram (failing)"
+  // Gives the user constant peripheral awareness without a modal interruption.
+  const activeId = store.get('activeProvider') || 'openai';
+  const activeHealth = health.get(activeId);
+  let providerLabel;
+  if (activeHealth && !activeHealth.healthy) {
+    const resolved = resolveActiveProvider();
+    const fbId = resolved && resolved.id !== activeId ? resolved.id : null;
+    providerLabel = fbId
+      ? `Provider: ${getProviderLabel(activeId)} → ${getProviderLabel(fbId)} (failing)`
+      : `Provider: ${getProviderLabel(activeId)} (failing)`;
+  } else {
+    providerLabel = `Provider: ${getProviderLabel(activeId)}`;
+  }
   const appVersion = app.getVersion();
 
   const template = [
@@ -511,7 +560,11 @@ function setupUiohook() {
     // Keybind capture mode: capture the next non-modifier key + its modifier state
     // and route to the right setting via the mode tag.
     if (keybindMode) {
-      if (MODIFIER_KEYCODES.has(e.keycode)) return;     // wait for an anchor key
+      // Chord captures need an anchor (non-modifier) key + decoration modifiers.
+      // Talk-key captures, by contrast, are typically a BARE modifier (the
+      // default is Right Option, keycode 3640). Only filter for chord modes.
+      const isChordMode = keybindMode.mode === 'toggleChord' || keybindMode.mode === 'digitChord';
+      if (isChordMode && MODIFIER_KEYCODES.has(e.keycode)) return;
       const captured = {
         keycode: e.keycode,
         label: getKeyName(e.keycode),
@@ -650,10 +703,43 @@ function notify(title, body) {
   } catch (_) {}
 }
 
-function getActiveProviderConfig() {
-  const id = store.get('activeProvider') || 'openai';
+// Order of preference when the configured active provider is unhealthy.
+// OpenAI Whisper batch is the universal fallback: the simplest, most reliable
+// code path in the repo and the same one the existing post-finalize fallback
+// uses. The active provider is tried first (then deduped from the fallback
+// chain), so picking 'openai' as active gracefully falls through to Groq →
+// Deepgram if OpenAI itself is the one failing.
+const FALLBACK_ORDER = ['openai', 'groq', 'deepgram'];
+
+// Returns the effective provider to use for THIS recording, factoring in the
+// health cache. Per-recording only — never persists the swap, so the user's
+// chosen activeProvider is preserved across the failure.
+//
+//   { id, cfg, providers, fellBack, originalId } — usable provider
+//   null                                          — none usable; block recording
+//
+// Cache-miss is optimistic-healthy: we don't block the user on a probe that
+// hasn't run yet (the background refresh will populate accurate data for the
+// next press; if THIS recording fails, invalidate-on-failure marks it red).
+function resolveActiveProvider() {
+  const configuredId = store.get('activeProvider') || 'openai';
   const providers = store.get('providers') || {};
-  return { id, cfg: providers[id] || {}, providers };
+  const candidates = [configuredId, ...FALLBACK_ORDER.filter((id) => id !== configuredId)];
+
+  for (const id of candidates) {
+    const cfg = providers[id] || {};
+    if (!cfg.apiKey) continue;
+    const h = health.get(id);
+    if (h && !h.healthy) continue;
+    return {
+      id,
+      cfg,
+      providers,
+      fellBack: id !== configuredId,
+      originalId: id === configuredId ? null : configuredId,
+    };
+  }
+  return null;
 }
 
 function newRecordingId() {
@@ -663,11 +749,30 @@ function newRecordingId() {
 // ── Recording lifecycle ──
 
 function beginRecording() {
-  const { id: providerIdLocal, cfg, providers } = getActiveProviderConfig();
-  if (!cfg.apiKey) {
-    notify('MindWhisper — API key missing', `Set the API key for ${getProviderLabel(providerIdLocal)} in Providers.`);
+  const resolved = resolveActiveProvider();
+  if (!resolved) {
+    // Every configured provider is either keyless or known-unhealthy. Block
+    // the recording, notify, and (first time per session) auto-open Providers
+    // so the fix is one paste away.
+    notify('MindWhisper — No working provider', 'Open Providers to configure or fix an API key.');
+    if (!providersWindowAutoOpened) {
+      providersWindowAutoOpened = true;
+      try { showWindow('providers'); } catch (_) {}
+    }
+    // Kick off a background refresh — maybe the cache is stale and the user
+    // already fixed the issue. The next press will see fresh data.
+    refreshAllProviderHealth().catch(() => {});
     return;
   }
+
+  if (resolved.fellBack) {
+    notify(
+      'MindWhisper',
+      `${getProviderLabel(resolved.originalId)} unreachable — using ${getProviderLabel(resolved.id)} for this recording.`
+    );
+  }
+
+  const { id: providerIdLocal, cfg, providers } = resolved;
 
   // If a prior session is still finalizing, cancel it. The in-flight finalize will see
   // inFlightFinalizeToken change and skip its paste.
@@ -716,8 +821,19 @@ function beginRecording() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     try { mainWindow.webContents.send('start-recording', { id: recId }); } catch (_) {}
   }
-  showHud();
-  sendHud({ phase: 'recording', level: 0 });
+  // Defer the visible HUD: if the user releases within 150ms (a Cmd+C-style
+  // accidental press with a bare-modifier talk key, or a sub-threshold tap),
+  // the HUD never appears at all. For real holds, the delay is below the
+  // perceptual "instant feedback" threshold and feels immediate.
+  if (currentHudDeferId) clearTimeout(currentHudDeferId);
+  currentHudDeferId = setTimeout(() => {
+    currentHudDeferId = null;
+    if (currentRecordingId === recId && isRecording) {
+      showHud();
+      sendHud({ phase: 'recording', level: 0 });
+    }
+  }, HUD_SHOW_DELAY_MS);
+  // Tray label change is immediate — that's a cheap, non-flashing signal.
   updateTrayMenu('Recording...');
 
   recordingHardCapId = setTimeout(() => {
@@ -743,6 +859,10 @@ function endRecording() {
     if (currentSession) { try { currentSession.cancel(); } catch (_) {} }
     currentSession = null;
     currentRecordingId = null;
+    // Cancel the pending HUD show — if the timer hadn't fired yet, this means
+    // the HUD never became visible (the typical case for a Cmd+C-style trigger
+    // with a bare-modifier talk key).
+    if (currentHudDeferId) { clearTimeout(currentHudDeferId); currentHudDeferId = null; }
     hideHud();
     updateTrayMenu('Idle');
     applyPendingHotkeyRestart();
@@ -788,6 +908,17 @@ async function finalizeRecording(wavBuffer) {
     lastError = err;
     console.error('[finalize] session.finish failed:', err && err.message);
     try { session.cancel(); } catch (_) {}
+
+    // Invalidate this provider's health cache so the next press uses fallback
+    // immediately instead of optimistically retrying. Background-refresh in
+    // case the failure was transient — next press will see accurate data.
+    if (providerIdAtStart) {
+      health.invalidate(providerIdAtStart);
+      const cfg = (store.get('providers') || {})[providerIdAtStart] || {};
+      health.refresh(providerIdAtStart, cfg.apiKey).then(() => {
+        try { updateTrayMenu('Idle'); } catch (_) {}
+      }).catch(() => {});
+    }
   }
 
   // Superseded by a newer recording? Bail without paste.
@@ -879,6 +1010,25 @@ async function finalizeRecording(wavBuffer) {
 const FORMATTER_LANGUAGE_PRESERVE =
   '\n\nIMPORTANT: Respond in the same language as the user message. Never translate to another language.';
 
+// Universal anti-creation guardrail prepended to EVERY formatter call. Stronger
+// constraints than per-preset prompts, so even a preset that says "be concise"
+// can't make the model summarize. Per-preset prompts only describe STYLE.
+const FORMATTER_GUARDRAIL =
+`You are a strict text formatter. Your ONLY job is to apply the formatting style below to the user's dictation.
+
+Hard rules:
+- Do NOT add ideas, facts, examples, or content the user did not dictate.
+- Do NOT expand on topics, suggest additions, or "improve" the substance.
+- Do NOT summarize, condense, paraphrase, or omit content the user dictated.
+- You MAY fix grammar, punctuation, capitalization, and remove filler words ("um", "uh", "like", "you know") for clarity.
+- You MAY restructure clauses for readability if the user's intent is preserved exactly.
+- You MAY add minor connector words (e.g. "and", "but", "so") if they're necessary for the sentence to be grammatical.
+
+If the input is already well-formatted, return it unchanged. Output ONLY the formatted text — no preamble, no commentary, no quotation marks around it.
+
+Formatting style to apply:
+`;
+
 async function formatTextStreaming(rawText, openaiKey, prompt, ownToken) {
   const openai = new OpenAI({ apiKey: openaiKey });
   const ac = new AbortController();
@@ -888,7 +1038,7 @@ async function formatTextStreaming(rawText, openaiKey, prompt, ownToken) {
       {
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: prompt + FORMATTER_LANGUAGE_PRESERVE },
+          { role: 'system', content: FORMATTER_GUARDRAIL + prompt + FORMATTER_LANGUAGE_PRESERVE },
           { role: 'user', content: rawText },
         ],
         stream: true,
@@ -1041,6 +1191,12 @@ ipcMain.handle('save-providers-config', (_event, partial) => {
     store.set('providers', merged);
   }
   updateTrayMenu('Idle');
+  // Re-probe everything: the user just edited keys, so any cached health is
+  // stale. Fire-and-forget; the tray will update again when the batch settles.
+  // Reset the "first-press-per-session" auto-open guard: the user has engaged
+  // with Providers, so the next failure mode deserves a fresh auto-open.
+  providersWindowAutoOpened = false;
+  refreshAllProviderHealth().catch(() => {});
   return true;
 });
 
@@ -1323,6 +1479,15 @@ function onResume() {
   recreateTray();
   // macOS may have reset HUD window flags during sleep — re-applied lazily by showHud on next record.
   applyPendingHotkeyRestart();
+
+  // Network state likely changed during sleep. Re-probe the active provider so
+  // the very next press has accurate health data. Other providers refresh on
+  // their normal 5-minute cadence.
+  const activeId = store.get('activeProvider') || 'openai';
+  const cfg = (store.get('providers') || {})[activeId] || {};
+  health.refresh(activeId, cfg.apiKey).then(() => {
+    try { updateTrayMenu('Idle'); } catch (_) {}
+  }).catch(() => {});
 }
 
 // ── App lifecycle ──
@@ -1380,6 +1545,13 @@ app.whenReady().then(() => {
   // Auto-update: checks GitHub Releases, downloads in background, prompts via tray.
   setupAutoUpdater();
 
+  // Provider health: probe all configured providers at boot, then keep the
+  // cache fresh every 5 minutes. Boot probe is fire-and-forget so it doesn't
+  // gate the rest of init; the first recording within the first ~2 s could
+  // see a cache miss (treated as optimistic-healthy) and that's fine.
+  refreshAllProviderHealth().catch(() => {});
+  startHealthRefreshLoop();
+
   // Power events
   try {
     powerMonitor.on('suspend', onSleepOrLock);
@@ -1405,6 +1577,7 @@ app.on('before-quit', () => {
 
   if (healthIntervalId)         { clearInterval(healthIntervalId);         healthIntervalId = null; }
   if (updateCheckIntervalId)    { clearInterval(updateCheckIntervalId);    updateCheckIntervalId = null; }
+  if (healthRefreshIntervalId)  { clearInterval(healthRefreshIntervalId);  healthRefreshIntervalId = null; }
   if (recordingHardCapId)       { clearTimeout(recordingHardCapId);        recordingHardCapId = null; }
   if (formatterNoticeHideTimer) { clearTimeout(formatterNoticeHideTimer);  formatterNoticeHideTimer = null; }
 
