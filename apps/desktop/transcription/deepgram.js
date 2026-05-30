@@ -3,10 +3,13 @@ const { ProviderConfigError, ProviderConnectionError } = require('./provider');
 
 const DEEPGRAM_WS_URL = 'wss://api.deepgram.com/v1/listen';
 
-function buildUrl({ model = 'nova-3', sampleRate = 16000 }) {
+function buildUrl({ model = 'nova-3', sampleRate = 16000, language = 'auto' }) {
+  // 'auto' → 'multi' (nova-3 code-switching detection); a specific ISO code is
+  // passed through so the user can force a single language.
+  const dgLanguage = (!language || language === 'auto') ? 'multi' : language;
   const params = new URLSearchParams({
     model,
-    language: 'multi',
+    language: dgLanguage,
     encoding: 'linear16',
     sample_rate: String(sampleRate),
     channels: '1',
@@ -18,10 +21,10 @@ function buildUrl({ model = 'nova-3', sampleRate = 16000 }) {
   return `${DEEPGRAM_WS_URL}?${params.toString()}`;
 }
 
-function createSession({ apiKey, model = 'nova-3', sampleRate = 16000, hooks }) {
+function createSession({ apiKey, model = 'nova-3', sampleRate = 16000, language = 'auto', hooks }) {
   if (!apiKey) throw new ProviderConfigError('Deepgram API key not set');
 
-  const url = buildUrl({ model, sampleRate });
+  const url = buildUrl({ model, sampleRate, language });
   const ws = new WebSocket(url, {
     headers: { Authorization: `Token ${apiKey}` },
   });

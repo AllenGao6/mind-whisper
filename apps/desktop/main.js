@@ -37,6 +37,7 @@ const store = new Store({
       },
     ],
     activeProvider: 'openai',
+    language: 'auto',
     providers: {
       openai: { apiKey: '' },
       deepgram: { apiKey: '', model: 'nova-3' },
@@ -237,8 +238,8 @@ function createHudWindow() {
     try { hudWindow.destroy(); } catch (_) {}
   }
   hudWindow = new BrowserWindow({
-    width: 300,
-    height: 64,
+    width: 56,
+    height: 26,
     show: false,
     frame: false,
     transparent: true,
@@ -274,6 +275,15 @@ function createHudWindow() {
     recreateHudSoon();
   });
   hudWindow.on('closed', () => { /* defensive — should never close on its own */ });
+
+  // The Flow Bar is persistent: once the renderer is ready, push the current
+  // config snapshot, render the idle lozenge, and show it bottom-center. This
+  // 'once' re-attaches on every (re)create, so crash-recovery re-shows it too.
+  hudWindow.webContents.once('did-finish-load', () => {
+    sendHudConfig();
+    sendHud({ phase: 'idle' });
+    showHud();
+  });
 }
 
 let hudRecreatePending = false;
@@ -295,33 +305,39 @@ function applyHudWindowProperties() {
   try {
     hudWindow.setAlwaysOnTop(true, 'screen-saver');
     hudWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    hudWindow.setIgnoreMouseEvents(true);
+    // Interactive: the Flow Bar accepts hover/click so the user can expand it
+    // and pick language/format/provider. focusable:false (set at creation)
+    // keeps the active app's focus, so paste still targets the right window.
+    hudWindow.setIgnoreMouseEvents(false);
   } catch (e) {
     console.error('[HUD] applyHudWindowProperties failed:', e && e.message);
   }
 }
 
-function positionHudAtCursor() {
-  if (!hudWindow || hudWindow.isDestroyed()) return;
+// Idle (collapsed) Flow Bar size. The renderer drives exact sizes per visual
+// state via the 'hud-resize' IPC; this is the default + crash-recovery size.
+const HUD_IDLE_SIZE = { width: 56, height: 26 };
+
+function hudWorkArea() {
   let cursor;
   try { cursor = screen.getCursorScreenPoint(); } catch (_) { cursor = null; }
-  if (!cursor || typeof cursor.x !== 'number' || typeof cursor.y !== 'number') {
-    const primary = screen.getPrimaryDisplay();
-    cursor = {
-      x: primary.workArea.x + Math.floor(primary.workArea.width / 2),
-      y: primary.workArea.y + Math.floor(primary.workArea.height / 2),
-    };
-  }
   let display;
-  try { display = screen.getDisplayNearestPoint(cursor); } catch (_) { display = null; }
+  try { display = cursor ? screen.getDisplayNearestPoint(cursor) : screen.getPrimaryDisplay(); }
+  catch (_) { display = null; }
   let wa = display && display.workArea;
   if (!wa || wa.width <= 0 || wa.height <= 0) wa = screen.getPrimaryDisplay().workArea;
+  return wa;
+}
 
-  const w = 300, h = 64;
-  let x = cursor.x - Math.floor(w / 2);
-  let y = cursor.y + 24;
-  x = Math.max(wa.x + 8, Math.min(x, wa.x + wa.width - w - 8));
-  y = Math.max(wa.y + 8, Math.min(y, wa.y + wa.height - h - 8));
+// Anchor the HUD at bottom-center of the active display. Growing the height
+// keeps the bottom edge fixed, so the bar expands upward (Wispr-Flow style).
+function setHudBounds(width, height) {
+  if (!hudWindow || hudWindow.isDestroyed()) return;
+  const wa = hudWorkArea();
+  const w = Math.max(80, Math.min(wa.width - 16, Math.round(width) || HUD_IDLE_SIZE.width));
+  const h = Math.max(28, Math.min(wa.height - 16, Math.round(height) || HUD_IDLE_SIZE.height));
+  const x = wa.x + Math.floor((wa.width - w) / 2);
+  const y = wa.y + wa.height - h - 16;
   try {
     hudWindow.setBounds({ x, y, width: w, height: h });
   } catch (e) {
@@ -332,11 +348,12 @@ function positionHudAtCursor() {
 function showHud() {
   if (!hudWindow || hudWindow.isDestroyed()) {
     createHudWindow();
-    // Window is reloading; first showInactive will show whatever the renderer has rendered.
+    // Window is reloading; did-finish-load will showInactive once ready.
   }
   if (!hudWindow || hudWindow.isDestroyed()) return;
   applyHudWindowProperties();
-  positionHudAtCursor();
+  const b = hudWindow.getBounds();
+  setHudBounds(b.width, b.height);
   try {
     hudWindow.showInactive();
   } catch (e) {
@@ -345,12 +362,12 @@ function showHud() {
   }
 }
 
-function hideHud() {
+// The Flow Bar is persistent — "done" doesn't hide it, it returns to the
+// collapsed idle lozenge so the user can still hover to change settings.
+function hudToIdle() {
   if (!hudWindow || hudWindow.isDestroyed()) return;
-  sendHud({ phase: 'hide' });
-  try { hudWindow.hide(); } catch (e) {
-    console.error('[HUD] hide failed:', e && e.message);
-  }
+  sendHud({ phase: 'idle' });
+  setHudBounds(HUD_IDLE_SIZE.width, HUD_IDLE_SIZE.height);
 }
 
 function sendHud(payload) {
@@ -367,6 +384,25 @@ function sendHud(payload) {
       recreateHudSoon();
     }
   }
+}
+
+function buildHudConfig() {
+  return {
+    language: store.get('language') || 'auto',
+    activeProvider: store.get('activeProvider') || 'openai',
+    providers: store.get('providers') || {},
+    formatterEnabled: !!store.get('formatterEnabled'),
+    formatterActivePresetId: store.get('formatterActivePresetId'),
+    formatterPresets: store.get('formatterPresets') || [],
+  };
+}
+
+// Push the current config snapshot to the Flow Bar so its pickers stay in sync
+// with the store regardless of where a change originated (bar, tray, chords,
+// settings window).
+function sendHudConfig() {
+  if (!hudWindow || hudWindow.isDestroyed()) return;
+  try { hudWindow.webContents.send('hud-config', buildHudConfig()); } catch (_) {}
 }
 
 function showWindow(tab) {
@@ -439,11 +475,18 @@ function recreateTray() {
 //      of leaving it for AppKit to clean up during app exit.
 //   3. Idempotent — safe to call multiple times if the user double-clicks Quit.
 let isQuitInProgress = false;
-function gracefulQuit() {
+let isUpdateInstallInProgress = false;
+function prepareForAppExit(reason) {
   if (isQuitInProgress) return;
   isQuitInProgress = true;
   app.isQuitting = true;
-  console.log('[quit] graceful shutdown initiated');
+  console.log(`[quit] ${reason || 'shutdown'} initiated`);
+
+  if (healthIntervalId)         { clearInterval(healthIntervalId);         healthIntervalId = null; }
+  if (updateCheckIntervalId)    { clearInterval(updateCheckIntervalId);    updateCheckIntervalId = null; }
+  if (healthRefreshIntervalId)  { clearInterval(healthRefreshIntervalId);  healthRefreshIntervalId = null; }
+  if (recordingHardCapId)       { clearTimeout(recordingHardCapId);        recordingHardCapId = null; }
+  if (formatterNoticeHideTimer) { clearTimeout(formatterNoticeHideTimer);  formatterNoticeHideTimer = null; }
 
   // Release Cocoa references eagerly so AppKit isn't doing it during quit.
   try {
@@ -452,6 +495,13 @@ function gracefulQuit() {
   tray = null;
 
   try { if (hudWindow && !hudWindow.isDestroyed()) hudWindow.hide(); } catch (_) {}
+  try { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide(); } catch (_) {}
+  try { uIOhook.stop(); } catch (_) {}
+}
+
+function gracefulQuit() {
+  if (isQuitInProgress) return;
+  prepareForAppExit('graceful shutdown');
 
   // Defer so Cocoa's NSMenu modal callback fully unwinds before app.quit()
   // walks the window list. Without this, the signed-build quit hangs.
@@ -653,6 +703,7 @@ function setFormatterState({ enabled, activePresetId } = {}) {
   if (activePresetId !== undefined) store.set('formatterActivePresetId', activePresetId);
   updateTrayMenu('Idle');
   notifyFormatterChanged();
+  sendHudConfig();
 }
 
 function toggleFormatter() {
@@ -684,7 +735,7 @@ function showFormatterNotice({ enabled, presetName }) {
   formatterNoticeHideTimer = setTimeout(() => {
     formatterNoticeHideTimer = null;
     // Only hide if no recording happened in the meantime.
-    if (!isRecording) hideHud();
+    if (!isRecording) hudToIdle();
   }, 1500);
 }
 
@@ -796,6 +847,7 @@ function beginRecording() {
     currentSession = transcription.createSession({
       providerId: providerIdLocal,
       providersConfig: providers,
+      language: store.get('language') || 'auto',
       hooks: {
         onPartial: (interim, finals) => {
           if (currentRecordingId !== recId) return;
@@ -863,7 +915,7 @@ function endRecording() {
     // the HUD never became visible (the typical case for a Cmd+C-style trigger
     // with a bare-modifier talk key).
     if (currentHudDeferId) { clearTimeout(currentHudDeferId); currentHudDeferId = null; }
-    hideHud();
+    hudToIdle();
     updateTrayMenu('Idle');
     applyPendingHotkeyRestart();
     return;
@@ -891,7 +943,7 @@ async function finalizeRecording(wavBuffer) {
     finalizingStartedAt = null;
     inFlightFinalizeToken = null;
     currentRecordingId = null;
-    hideHud();
+    hudToIdle();
     updateTrayMenu('Idle');
     applyPendingHotkeyRestart();
     return;
@@ -959,7 +1011,7 @@ async function finalizeRecording(wavBuffer) {
     updateTrayMenu(lastError ? 'Error' : 'Idle');
     if (lastError) setTimeout(() => updateTrayMenu('Idle'), 3000);
     sendHud({ phase: 'error', message: msg });
-    setTimeout(() => hideHud(), 1500);
+    setTimeout(() => hudToIdle(), 1500);
     if (lastError) notify('MindWhisper — Transcription failed', msg);
     finalizingStartedAt = null;
     inFlightFinalizeToken = null;
@@ -999,7 +1051,7 @@ async function finalizeRecording(wavBuffer) {
   safePaste(finalText);
   addToHistory(finalText);
   sendHud({ phase: 'done', text: finalText });
-  setTimeout(() => hideHud(), 900);
+  setTimeout(() => hudToIdle(), 900);
   updateTrayMenu('Idle');
   finalizingStartedAt = null;
   inFlightFinalizeToken = null;
@@ -1093,7 +1145,7 @@ function forceResetRecording(reason) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     try { mainWindow.webContents.send('cancel-recording'); } catch (_) {}
   }
-  hideHud();
+  hudToIdle();
   updateTrayMenu('Idle');
   applyPendingHotkeyRestart();
 }
@@ -1111,7 +1163,7 @@ function checkRecordingHealth() {
   // Tray self-healing: if the JS-side tray got destroyed somehow, rebuild.
   // (This won't catch the more common case where macOS detaches the NSStatusItem
   // natively — that's handled in onResume — but it covers edge cases.)
-  if (!tray || tray.isDestroyed()) {
+  if (!app.isQuitting && !isQuitInProgress && (!tray || tray.isDestroyed())) {
     console.warn('[watchdog] tray missing/destroyed, recreating');
     recreateTray();
   }
@@ -1174,6 +1226,7 @@ ipcMain.handle('save-settings', (_event, settings) => {
 
 ipcMain.handle('get-providers-config', () => ({
   activeProvider: store.get('activeProvider') || 'openai',
+  language: store.get('language') || 'auto',
   providers: store.get('providers') || {},
 }));
 
@@ -1181,6 +1234,9 @@ ipcMain.handle('save-providers-config', (_event, partial) => {
   if (!partial) return true;
   if (typeof partial.activeProvider === 'string') {
     store.set('activeProvider', partial.activeProvider);
+  }
+  if (typeof partial.language === 'string') {
+    store.set('language', partial.language);
   }
   if (partial.providers && typeof partial.providers === 'object') {
     const existing = store.get('providers') || {};
@@ -1197,7 +1253,43 @@ ipcMain.handle('save-providers-config', (_event, partial) => {
   // with Providers, so the next failure mode deserves a fresh auto-open.
   providersWindowAutoOpened = false;
   refreshAllProviderHealth().catch(() => {});
+  sendHudConfig();
   return true;
+});
+
+// ── Flow Bar (HUD) IPC ──
+
+// Renderer reports its desired window size for the current visual state; we
+// re-anchor it bottom-center. Clamped in setHudBounds.
+ipcMain.on('hud-resize', (_event, size) => {
+  if (!size) return;
+  setHudBounds(size.width, size.height);
+});
+
+ipcMain.on('hud-select-language', (_event, code) => {
+  if (typeof code !== 'string' || !code) return;
+  store.set('language', code);
+  sendHudConfig();
+});
+
+ipcMain.on('hud-select-provider', (_event, id) => {
+  if (typeof id !== 'string' || !id) return;
+  store.set('activeProvider', id);
+  updateTrayMenu('Idle');
+  // A deliberate provider switch deserves a fresh fail-open and re-probe.
+  providersWindowAutoOpened = false;
+  refreshAllProviderHealth().catch(() => {});
+  sendHudConfig();
+});
+
+ipcMain.on('hud-select-format', (_event, presetId) => {
+  // null / '' / 'off' turns the formatter off; any other id enables it.
+  if (presetId === null || presetId === '' || presetId === 'off') {
+    setFormatterState({ enabled: false });
+  } else {
+    setFormatterState({ enabled: true, activePresetId: presetId });
+  }
+  // setFormatterState already calls sendHudConfig().
 });
 
 ipcMain.handle('test-provider', async (_event, providerId) => {
@@ -1378,14 +1470,25 @@ function checkForUpdatesManual() {
 
 function installUpdateNow() {
   if (!updateDownloadedInfo) return;
+  if (isUpdateInstallInProgress || isQuitInProgress) return;
   if (isRecording || finalizingStartedAt !== null) {
     pendingUpdateInstall = true;
     notify('MindWhisper', 'Update will install as soon as the current dictation finishes.');
     return;
   }
-  app.isQuitting = true;
+  isUpdateInstallInProgress = true;
+  pendingUpdateInstall = false;
+  installPromptPending = false;
+  prepareForAppExit('update install');
   // isSilent=false shows the installer UI; isForceRunAfter=true relaunches the new version after install.
-  autoUpdater.quitAndInstall(false, true);
+  setImmediate(() => {
+    try {
+      autoUpdater.quitAndInstall(false, true);
+    } catch (err) {
+      console.error('[autoUpdater] quitAndInstall failed:', err && (err.stack || err.message));
+      app.quit();
+    }
+  });
 }
 
 function applyPendingUpdateInstall() {
