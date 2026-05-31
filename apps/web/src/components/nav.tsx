@@ -46,6 +46,12 @@ export function Nav() {
             How it works
           </a>
           <a
+            href="#setup"
+            className="hidden transition-colors hover:text-[var(--color-text)] sm:inline"
+          >
+            Setup
+          </a>
+          <a
             href="#faq"
             className="hidden transition-colors hover:text-[var(--color-text)] sm:inline"
           >
