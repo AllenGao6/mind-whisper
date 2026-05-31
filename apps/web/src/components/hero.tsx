@@ -15,22 +15,20 @@ export function Hero() {
           <div className="flex flex-col items-center text-center sm:items-start sm:text-left">
             <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/80 px-3 py-1 font-mono text-[11px] uppercase tracking-wider text-[var(--color-text-muted)] backdrop-blur">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)] shadow-[0_0_8px_var(--color-accent)]" />
-              Open source · macOS only
+              Free · Open source · macOS
             </span>
 
             <h1 className="max-w-2xl text-balance text-4xl font-medium leading-[1.05] tracking-tight sm:text-5xl md:text-6xl">
-              Hold a key. Speak.
+              Speak. It types itself.
               <br />
               <span className="bg-gradient-to-br from-[var(--color-text)] to-[var(--color-text-muted)] bg-clip-text text-transparent">
-                Your words appear at the cursor.
+                Free, open, and yours.
               </span>
             </h1>
 
             <p className="mt-6 max-w-xl text-balance text-base leading-relaxed text-[var(--color-text-muted)] sm:text-lg">
-              MindWhisper lives in your menu bar. Press your hotkey in any app,
-              talk in your language, and the text appears right where your cursor
-              is. A tiny bar at the bottom of the screen lets you switch language,
-              formatting, and provider — no window required.
+              Hold a key in any app, talk, let go — your words land at the cursor.
+              Your providers, your data, your machine. No subscription.
             </p>
 
             <div className="mt-9">

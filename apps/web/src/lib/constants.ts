@@ -6,6 +6,6 @@ export const DOWNLOAD_ARM64 = `${LATEST_RELEASE_URL}/download/MindWhisper-arm64.
 export const DOWNLOAD_X64 = `${LATEST_RELEASE_URL}/download/MindWhisper-x64.dmg`;
 
 export const PRODUCT_NAME = 'MindWhisper';
-export const PRODUCT_TAGLINE = 'Hold-to-talk dictation for macOS, in any language.';
+export const PRODUCT_TAGLINE = 'Open-source voice dictation for Mac.';
 export const PRODUCT_AUTHOR = 'liveq.ai';
 export const PRODUCT_AUTHOR_URL = 'https://liveq.ai';

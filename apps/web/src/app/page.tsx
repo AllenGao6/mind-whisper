@@ -2,6 +2,7 @@ import { Nav } from "@/components/nav";
 import { Hero } from "@/components/hero";
 import { FeatureTour } from "@/components/feature-tour";
 import { Features } from "@/components/features";
+import { Comparison } from "@/components/comparison";
 import { HowItWorks } from "@/components/how-it-works";
 import { Faq } from "@/components/faq";
 import { Footer } from "@/components/footer";
@@ -14,6 +15,7 @@ export default function Home() {
         <Hero />
         <FeatureTour />
         <Features />
+        <Comparison />
         <HowItWorks />
         <Faq />
       </main>

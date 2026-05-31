@@ -10,17 +10,17 @@ const steps: Step[] = [
   {
     index: "01",
     title: "Hold your hotkey",
-    body: "Default is Right Option — rebindable to any key. Works globally in every app.",
+    body: "Right Option by default — rebindable. Works in every app.",
   },
   {
     index: "02",
     title: "Speak naturally",
-    body: "The bar at the bottom shows a live audio meter — and live text as you talk on Deepgram. Switch language right there if you need to.",
+    body: "A live meter shows you're heard. Switch language right there if you need to.",
   },
   {
     index: "03",
     title: "Release — text appears",
-    body: "Transcript is formatted by your active preset and pasted at the cursor. Your previous clipboard is restored automatically.",
+    body: "Formatted by your preset, pasted at the cursor. Your clipboard is restored.",
   },
 ];
 

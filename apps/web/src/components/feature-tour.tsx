@@ -3,46 +3,46 @@ import { FeatureSpotlight } from "./feature-spotlight";
 const spotlights = [
   {
     badge: "Dynamic island",
-    title: "A tiny bar that stays out of your way",
-    body: "A thin pill rests at the bottom of your screen. Hover it to switch your language, choose a formatting style, or change the transcription provider — then it tucks itself away again.",
+    title: "A bar that stays out of your way",
+    body: "A thin pill rests at the bottom of your screen. Hover to switch language, formatting, or provider — then it tucks away.",
     points: [
-      "Hover to expand, move away to collapse",
-      "Never steals focus from the app you're typing in",
-      "Hide it entirely from the menu bar if you'd rather not see it",
+      "Hover to expand, leave to collapse",
+      "Never steals focus",
+      "Hide it entirely if you like",
     ],
     demoLabel: "Dynamic island demo",
   },
   {
     badge: "Multilingual",
-    title: "Speak in the language you think in",
-    body: "MindWhisper detects what you're speaking automatically — or lock it to a specific language for the cleanest results. No settings spelunking.",
+    title: "Speak the language you think in",
+    body: "Auto-detects your language, or lock one for the cleanest results.",
     points: [
       "12+ languages, plus auto-detect",
-      "Works across OpenAI, Deepgram, and Groq",
-      "Switch language in one click from the bar",
+      "Works on every provider",
+      "Switch in one click",
     ],
     demoLabel: "Multilingual demo",
     reverse: true,
   },
   {
     badge: "Hold-to-talk",
-    title: "Press, speak, release — it's pasted",
-    body: "Hold your hotkey in any app, say what you mean, and let go. The text appears right where your cursor is. No window to open, no buttons to click.",
+    title: "Press, speak, release",
+    body: "Hold your hotkey anywhere, say what you mean, let go. Text lands at the cursor.",
     points: [
-      "Works everywhere on your Mac",
-      "Your previous clipboard is saved and restored",
-      "Rebind the key to whatever feels natural",
+      "Works in every app",
+      "Your clipboard is restored",
+      "Rebind to any key",
     ],
     demoLabel: "Hold-to-talk demo",
   },
   {
     badge: "Formatter",
-    title: "Turn rambling speech into clean writing",
-    body: "Pick Email, Slack, or bullet points — or write your own instructions — and your transcript is tidied up before it lands. Great for messages you'd otherwise rewrite.",
+    title: "Edit the AI prompt yourself",
+    body: "Pick Email, Slack, or bullets — or write your own instructions. Your transcript is cleaned up before it lands.",
     points: [
-      "Built-in Email / Slack / Bullets presets",
-      "Bring your own prompt",
-      "Toggle it on or off with a shortcut",
+      "Email / Slack / Bullets presets",
+      "Write your own prompt",
+      "Toggle with a shortcut",
     ],
     demoLabel: "Formatter demo",
     reverse: true,
@@ -64,7 +64,7 @@ export function FeatureTour() {
             What you can do
           </h2>
           <p className="mt-4 text-[var(--color-text-muted)]">
-            Talk in any app, in your language. Here&apos;s the gist.
+            Talk in any app, in your language.
           </p>
         </div>
 

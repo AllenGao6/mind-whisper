@@ -8,32 +8,32 @@ const features: Feature[] = [
   {
     badge: "Providers",
     title: "Three engines, one click to switch",
-    body: "OpenAI, Deepgram (streams text as you talk), and Groq. Pick whichever fits the moment.",
+    body: "OpenAI, Deepgram, and Groq. Switch anytime.",
   },
   {
     badge: "Privacy",
     title: "Your data stays on your Mac",
-    body: "No accounts, no tracking. Settings and history live locally. Audio only ever goes to the provider you chose.",
+    body: "No accounts, no tracking. Audio goes only to the provider you pick.",
   },
   {
     badge: "Clipboard-safe",
     title: "Nothing gets lost",
-    body: "Whatever was on your clipboard is saved before pasting and put right back after. No surprises.",
+    body: "Saved before pasting, restored after. No surprises.",
   },
   {
     badge: "Hotkeys",
     title: "Shortcuts that fit your hands",
-    body: "Rebind the talk key and the formatter shortcuts to anything you like. They work in every app.",
+    body: "Rebind every shortcut. Works in every app.",
   },
   {
     badge: "Updates",
     title: "Quietly stays current",
-    body: "Signed and notarized. New versions download in the background and install with one click.",
+    body: "Signed, notarized, auto-updating in the background.",
   },
   {
     badge: "Open source",
     title: "Free and yours to inspect",
-    body: "MIT-licensed. Read the code, build it yourself, or just download it and go.",
+    body: "MIT-licensed. Read it, build it, own it.",
   },
 ];
 
@@ -52,7 +52,7 @@ export function Features() {
             Small app. Serious dictation.
           </h2>
           <p className="mt-4 text-[var(--color-text-muted)]">
-            The rest of what makes it pleasant to use every day.
+            Everything else that makes it pleasant every day.
           </p>
         </div>
 
