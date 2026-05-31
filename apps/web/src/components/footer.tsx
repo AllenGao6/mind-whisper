@@ -1,3 +1,4 @@
+import Image from "next/image";
 import {
   GITHUB_URL,
   PRODUCT_AUTHOR,
@@ -11,9 +12,12 @@ export function Footer() {
     <footer className="border-t border-[var(--color-border)] bg-[var(--color-bg)] py-10">
       <div className="mx-auto flex max-w-[var(--container-wide)] flex-col items-center justify-between gap-4 px-6 text-sm text-[var(--color-text-muted)] sm:flex-row">
         <div className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className="inline-block h-4 w-4 rounded bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-strong)]"
+          <Image
+            src="/logo.png"
+            alt=""
+            width={16}
+            height={16}
+            className="h-4 w-4 rounded"
           />
           <span>
             {PRODUCT_NAME} · crafted by{" "}

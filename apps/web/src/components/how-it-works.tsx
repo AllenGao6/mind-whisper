@@ -1,3 +1,5 @@
+import { DemoPlaceholder } from "./demo-placeholder";
+
 type Step = {
   index: string;
   title: string;
@@ -13,7 +15,7 @@ const steps: Step[] = [
   {
     index: "02",
     title: "Speak naturally",
-    body: "A small bubble floats next to your cursor — audio meter for batch providers, live interim text for Deepgram streaming.",
+    body: "The bar at the bottom shows a live audio meter — and live text as you talk on Deepgram. Switch language right there if you need to.",
   },
   {
     index: "03",
@@ -39,18 +41,7 @@ export function HowItWorks() {
         </div>
 
         <div className="mt-14 grid gap-8 lg:grid-cols-[1.1fr_1fr] lg:items-center">
-          <div className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] ring-soft">
-            <video
-              className="aspect-video h-auto w-full object-cover"
-              autoPlay
-              loop
-              muted
-              playsInline
-              poster="/master.png"
-            >
-              <source src="/demo.mp4" type="video/mp4" />
-            </video>
-          </div>
+          <DemoPlaceholder label="Walkthrough" />
 
           <ol className="flex flex-col gap-3">
             {steps.map((step) => (

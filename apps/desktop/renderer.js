@@ -701,6 +701,23 @@ saveBtn.addEventListener('click', () => {
   }).catch(() => {});
 });
 
+// ── Dynamic island (HUD) visibility toggle ──
+const hudEnabledEl = document.getElementById('hud-enabled');
+
+async function loadHudEnabled() {
+  if (!hudEnabledEl) return;
+  hudEnabledEl.checked = await window.electronAPI.getHudEnabled();
+}
+
+hudEnabledEl?.addEventListener('change', () => {
+  window.electronAPI.setHudEnabled(hudEnabledEl.checked);
+});
+
+// Keep the checkbox in sync when toggled from the tray menu.
+window.electronAPI.onHudEnabledChanged((enabled) => {
+  if (hudEnabledEl) hudEnabledEl.checked = !!enabled;
+});
+
 // ── Init ──
 async function init() {
   const settings = await window.electronAPI.getSettings();
@@ -709,6 +726,7 @@ async function init() {
   await loadFormatter();
   await loadProviders();
   await loadChords();
+  await loadHudEnabled();
   setStatus('idle', 'Ready — waiting for hotkey');
 }
 

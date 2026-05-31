@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { GITHUB_URL, PRODUCT_NAME } from "@/lib/constants";
 
 export function Nav() {
@@ -8,14 +9,24 @@ export function Nav() {
           href="#top"
           className="flex items-center gap-2 text-sm font-medium tracking-tight"
         >
-          <span
-            aria-hidden
-            className="inline-block h-5 w-5 rounded-md bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-strong)] shadow-[0_0_20px_-2px_var(--color-accent)]"
+          <Image
+            src="/logo.png"
+            alt=""
+            width={20}
+            height={20}
+            className="h-5 w-5 rounded-md"
+            priority
           />
           <span>{PRODUCT_NAME}</span>
         </a>
 
         <nav className="flex items-center gap-6 text-sm text-[var(--color-text-muted)]">
+          <a
+            href="#tour"
+            className="hidden transition-colors hover:text-[var(--color-text)] sm:inline"
+          >
+            Tour
+          </a>
           <a
             href="#features"
             className="hidden transition-colors hover:text-[var(--color-text)] sm:inline"

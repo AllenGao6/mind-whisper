@@ -17,6 +17,7 @@ const store = new Store({
     keycode: 3640,
     keycodeLabel: 'Right Option',
     history: [],
+    hudEnabled: true,
     formatterEnabled: false,
     formatterActivePresetId: 'email',
     formatterPresets: [
@@ -282,7 +283,9 @@ function createHudWindow() {
   hudWindow.webContents.once('did-finish-load', () => {
     sendHudConfig();
     sendHud({ phase: 'idle' });
-    showHud();
+    // Only show the persistent idle pill if the island is enabled; otherwise it
+    // stays hidden until a recording starts.
+    if (store.get('hudEnabled') !== false) showHud();
   });
 }
 
@@ -337,7 +340,7 @@ function setHudBounds(width, height) {
   const w = Math.max(80, Math.min(wa.width - 16, Math.round(width) || HUD_IDLE_SIZE.width));
   const h = Math.max(28, Math.min(wa.height - 16, Math.round(height) || HUD_IDLE_SIZE.height));
   const x = wa.x + Math.floor((wa.width - w) / 2);
-  const y = wa.y + wa.height - h - 16;
+  const y = wa.y + wa.height - h - 10;
   try {
     hudWindow.setBounds({ x, y, width: w, height: h });
   } catch (e) {
@@ -362,12 +365,31 @@ function showHud() {
   }
 }
 
-// The Flow Bar is persistent — "done" doesn't hide it, it returns to the
-// collapsed idle lozenge so the user can still hover to change settings.
+// Return to rest after any recording/cancel/error. When the island is enabled,
+// rest = the collapsed idle pill (persistent, hoverable). When disabled, rest =
+// the window fully hidden (so the island only ever appears during recording).
 function hudToIdle() {
   if (!hudWindow || hudWindow.isDestroyed()) return;
+  if (store.get('hudEnabled') === false) {
+    try { hudWindow.hide(); } catch (e) { console.error('[HUD] hide failed:', e && e.message); }
+    return;
+  }
   sendHud({ phase: 'idle' });
   setHudBounds(HUD_IDLE_SIZE.width, HUD_IDLE_SIZE.height);
+}
+
+// Single source of truth for the show/hide setting — used by the tray checkbox
+// and the Settings toggle. Persists, refreshes the tray, mirrors to the settings
+// window, and reconciles the window (hide now if disabling, show idle if enabling).
+function setHudEnabledState(enabled) {
+  store.set('hudEnabled', !!enabled);
+  updateTrayMenu('Idle');
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.webContents.send('hud-enabled-changed', !!enabled); } catch (_) {}
+  }
+  if (isRecording) return;   // mid-recording: leave the visible bar alone
+  if (enabled) { showHud(); sendHud({ phase: 'idle' }); setHudBounds(HUD_IDLE_SIZE.width, HUD_IDLE_SIZE.height); }
+  else { try { hudWindow && !hudWindow.isDestroyed() && hudWindow.hide(); } catch (_) {} }
 }
 
 function sendHud(payload) {
@@ -555,6 +577,12 @@ function updateTrayMenu(status) {
       label: formatterLabel,
       click: () => { setFormatterState({ enabled: !formatterEnabled }); },
     },
+    {
+      label: 'Show dynamic island',
+      type: 'checkbox',
+      checked: store.get('hudEnabled') !== false,
+      click: () => { setHudEnabledState(store.get('hudEnabled') === false); },
+    },
     { type: 'separator' },
   ];
 
@@ -728,6 +756,7 @@ function disableFormatter() {
 let formatterNoticeHideTimer = null;
 function showFormatterNotice({ enabled, presetName }) {
   if (isRecording) return;             // don't disrupt live transcript HUD mid-recording
+  if (store.get('hudEnabled') === false) return;   // island off → no popup notices
   const text = enabled ? `ON — ${presetName || '(no preset)'}` : 'OFF';
   showHud();
   sendHud({ phase: 'notice', label: 'Formatter', text });
@@ -1377,6 +1406,13 @@ ipcMain.handle('save-formatter-config', (_event, cfg) => {
     enabled: cfg && cfg.enabled !== undefined ? !!cfg.enabled : undefined,
     activePresetId: cfg && cfg.activePresetId !== undefined ? cfg.activePresetId : undefined,
   });
+  return true;
+});
+
+ipcMain.handle('get-hud-enabled', () => store.get('hudEnabled') !== false);
+
+ipcMain.handle('set-hud-enabled', (_event, enabled) => {
+  setHudEnabledState(!!enabled);
   return true;
 });
 

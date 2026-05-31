@@ -38,4 +38,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveFormatterConfig: (cfg) => ipcRenderer.invoke('save-formatter-config', cfg),
   onFormatterStateChanged: (callback) => ipcRenderer.on('formatter-state-changed', (_e, data) => callback(data)),
   onFormattingStarted: (callback) => ipcRenderer.on('formatting-started', callback),
+
+  // Dynamic island (HUD) visibility
+  getHudEnabled: () => ipcRenderer.invoke('get-hud-enabled'),
+  setHudEnabled: (enabled) => ipcRenderer.invoke('set-hud-enabled', enabled),
+  onHudEnabledChanged: (callback) => ipcRenderer.on('hud-enabled-changed', (_e, enabled) => callback(enabled)),
 });

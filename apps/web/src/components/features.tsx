@@ -7,33 +7,33 @@ type Feature = {
 const features: Feature[] = [
   {
     badge: "Providers",
-    title: "Three providers, one click to switch",
-    body: "OpenAI Whisper, Deepgram Nova-3 (streaming, lowest latency), and Groq Whisper. Pick the engine that fits the moment.",
-  },
-  {
-    badge: "Formatter",
-    title: "Cleans up your speech before it pastes",
-    body: "GPT-4o-mini polishes the transcript with built-in presets — Email, Slack, Bullets — or write your own prompt. Streams live into the HUD.",
-  },
-  {
-    badge: "Hotkeys",
-    title: "Global, fully customizable",
-    body: "Rebind the hold-to-talk key, the formatter toggle, or any preset 1–9. Chord shortcuts work in every app.",
+    title: "Three engines, one click to switch",
+    body: "OpenAI, Deepgram (streams text as you talk), and Groq. Pick whichever fits the moment.",
   },
   {
     badge: "Privacy",
-    title: "Your data stays local",
-    body: "No telemetry. No accounts. Settings, presets, and history live on your Mac. Audio goes only to the provider you chose.",
+    title: "Your data stays on your Mac",
+    body: "No accounts, no tracking. Settings and history live locally. Audio only ever goes to the provider you chose.",
   },
   {
-    badge: "Reliability",
-    title: "Clipboard-safe paste",
-    body: "Your previous clipboard contents are snapshot before the paste and restored automatically. Nothing gets clobbered.",
+    badge: "Clipboard-safe",
+    title: "Nothing gets lost",
+    body: "Whatever was on your clipboard is saved before pasting and put right back after. No surprises.",
+  },
+  {
+    badge: "Hotkeys",
+    title: "Shortcuts that fit your hands",
+    body: "Rebind the talk key and the formatter shortcuts to anything you like. They work in every app.",
   },
   {
     badge: "Updates",
-    title: "Signed, notarized, auto-updating",
-    body: "Releases ship through GitHub. The app downloads new versions in the background and offers a one-click install in the menu bar.",
+    title: "Quietly stays current",
+    body: "Signed and notarized. New versions download in the background and install with one click.",
+  },
+  {
+    badge: "Open source",
+    title: "Free and yours to inspect",
+    body: "MIT-licensed. Read the code, build it yourself, or just download it and go.",
   },
 ];
 
@@ -52,8 +52,7 @@ export function Features() {
             Small app. Serious dictation.
           </h2>
           <p className="mt-4 text-[var(--color-text-muted)]">
-            Built for people who type for a living — and would rather speak
-            half the time.
+            The rest of what makes it pleasant to use every day.
           </p>
         </div>
 

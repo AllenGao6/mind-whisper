@@ -1,5 +1,5 @@
-import Image from "next/image";
 import { DownloadButton } from "./download-button";
+import { DemoPlaceholder } from "./demo-placeholder";
 
 export function Hero() {
   return (
@@ -27,9 +27,10 @@ export function Hero() {
             </h1>
 
             <p className="mt-6 max-w-xl text-balance text-base leading-relaxed text-[var(--color-text-muted)] sm:text-lg">
-              MindWhisper sits in your menu bar. Press your hotkey in any app —
-              Slack, Gmail, your IDE — talk, release, and the transcript pastes
-              where your cursor is. Multiple providers. Your data stays local.
+              MindWhisper lives in your menu bar. Press your hotkey in any app,
+              talk in your language, and the text appears right where your cursor
+              is. A tiny bar at the bottom of the screen lets you switch language,
+              formatting, and provider — no window required.
             </p>
 
             <div className="mt-9">
@@ -38,17 +39,7 @@ export function Hero() {
           </div>
 
           <div className="relative mx-auto w-full max-w-md lg:max-w-none">
-            <div className="absolute -inset-6 rounded-3xl bg-[var(--color-accent-soft)] blur-3xl" aria-hidden />
-            <div className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2 shadow-2xl ring-soft">
-              <Image
-                src="/master.png"
-                alt="MindWhisper settings window"
-                width={1200}
-                height={900}
-                priority
-                className="h-auto w-full rounded-xl"
-              />
-            </div>
+            <DemoPlaceholder label="Product demo" />
 
             <div className="relative mt-4 flex items-center justify-center gap-2 font-mono text-[11px] text-[var(--color-text-dim)]">
               <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-0.5">

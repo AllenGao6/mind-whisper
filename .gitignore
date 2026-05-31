@@ -2,10 +2,11 @@
 node_modules/
 apps/*/node_modules/
 
-# This is a pnpm workspace — npm/yarn lockfiles are never wanted
+# This is a pnpm workspace — npm/yarn/bun lockfiles are never wanted
 package-lock.json
 apps/*/package-lock.json
 yarn.lock
+bun.lock
 
 # Build output
 dist/
