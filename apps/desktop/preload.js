@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // History
   getHistory: () => ipcRenderer.invoke('get-history'),
   clearHistory: () => ipcRenderer.invoke('clear-history'),
+  exportHistory: () => ipcRenderer.invoke('export-history'),
 
   setKeybindMode: (enabled, mode) => ipcRenderer.send('set-keybind-mode', { enabled, mode }),
 

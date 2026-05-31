@@ -22,6 +22,7 @@ const saveMsg = document.getElementById('save-msg');
 // History
 const historyList = document.getElementById('history-list');
 const clearHistoryBtn = document.getElementById('clear-history-btn');
+const exportHistoryBtn = document.getElementById('export-history-btn');
 
 // Formatter
 const formatterEnabledEl = document.getElementById('formatter-enabled');
@@ -364,6 +365,14 @@ function escapeHtml(text) {
 clearHistoryBtn.addEventListener('click', async () => {
   await window.electronAPI.clearHistory();
   loadHistory();
+});
+
+exportHistoryBtn.addEventListener('click', () => {
+  withButtonState(
+    exportHistoryBtn,
+    () => window.electronAPI.exportHistory(),
+    { busyLabel: 'Exporting…', successLabel: 'Downloaded ✓', successMs: 2500 }
+  ).catch(() => { /* button already surfaced the error */ });
 });
 
 // ── Formatter ──

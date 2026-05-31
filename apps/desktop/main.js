@@ -1,7 +1,8 @@
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const { exec } = require('child_process');
-const { app, BrowserWindow, Tray, Menu, ipcMain, dialog, Notification, systemPreferences, screen, powerMonitor, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, dialog, Notification, systemPreferences, screen, powerMonitor, nativeImage, shell } = require('electron');
 const { uIOhook } = require('uiohook-napi');
 const OpenAI = require('openai');
 const Store = require('./lib/store');
@@ -1358,6 +1359,35 @@ ipcMain.handle('test-provider', async (_event, providerId) => {
 
 ipcMain.handle('get-history', () => store.get('history') || []);
 ipcMain.handle('clear-history', () => { store.set('history', []); return true; });
+
+// Export the full history to a plain-text file in the user's Downloads folder, then
+// reveal it in Finder. Auto-downloads (no save dialog) per product spec.
+ipcMain.handle('export-history', async () => {
+  const history = store.get('history') || [];
+  if (!history.length) throw new Error('No history to export');
+
+  const divider = '─'.repeat(48);
+  const lines = [
+    'MindWhisper Transcription History',
+    `Exported ${new Date().toLocaleString()}`,
+    `${history.length} entr${history.length === 1 ? 'y' : 'ies'}`,
+    '',
+  ];
+  for (const item of history) {
+    lines.push(divider);
+    lines.push(`[${new Date(item.timestamp).toLocaleString()}]`);
+    lines.push(item.text || '');
+    lines.push('');
+  }
+
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+  const fileName = `mindwhisper-history-${stamp}.txt`;
+  const filePath = path.join(app.getPath('downloads'), fileName);
+  fs.writeFileSync(filePath, lines.join('\n'), 'utf8');
+
+  try { shell.showItemInFolder(filePath); } catch (_) { /* reveal is best-effort */ }
+  return { path: filePath, fileName, count: history.length };
+});
 
 ipcMain.on('set-keybind-mode', (_event, payload) => {
   // payload: { enabled: boolean, mode?: 'talk' | 'toggleChord' | 'digitChord' }

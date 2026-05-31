@@ -426,6 +426,13 @@
       user-select: text;
     }
 
+    .history-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 12px;
+      -webkit-app-region: no-drag;
+    }
+
     .history-actions {
       margin-top: 12px;
       -webkit-app-region: no-drag;
@@ -663,6 +670,9 @@
 
   <!-- History Tab -->
   <div id="tab-history" class="tab-content">
+    <div class="history-toolbar">
+      <button id="export-history-btn" class="btn btn-primary">Export</button>
+    </div>
     <div class="history-list" id="history-list"></div>
     <div class="history-actions">
       <button id="clear-history-btn" class="btn btn-danger">Clear All</button>
