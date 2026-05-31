@@ -1,7 +1,7 @@
 {
   "name": "mind-whisper-monorepo",
   "private": true,
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "MindWhisper monorepo — macOS dictation app + marketing landing page.",
   "scripts": {
     "dev:web": "pnpm --filter web dev",
