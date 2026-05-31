@@ -34,6 +34,16 @@ const faqs: QA[] = [
     ),
   },
   {
+    q: "How is this different from Wispr Flow?",
+    a: (
+      <>
+        MindWhisper is free and open source, runs on your own provider keys, and
+        keeps your data on your Mac. You pay cents per minute instead of a
+        monthly subscription.
+      </>
+    ),
+  },
+  {
     q: "What does it cost?",
     a: (
       <>

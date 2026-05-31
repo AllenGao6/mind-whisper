@@ -18,18 +18,18 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: `${PRODUCT_NAME} — ${PRODUCT_TAGLINE}`,
   description:
-    "Press a key, speak, release. Your words appear at the cursor in any macOS app. Three transcription providers, customizable formatter, your data stays local.",
+    "Hold a key, speak, release — your words land at the cursor. Free, open source, runs on your own providers, your data stays on your Mac.",
   openGraph: {
     title: `${PRODUCT_NAME} — ${PRODUCT_TAGLINE}`,
     description:
-      "Hold-to-talk dictation for macOS. Multiple providers, local-only data, signed + auto-updating.",
+      "Free, open-source voice dictation for Mac. Your providers, your data, no subscription.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: `${PRODUCT_NAME} — ${PRODUCT_TAGLINE}`,
     description:
-      "Hold-to-talk dictation for macOS. Multiple providers, local-only data.",
+      "Free, open-source voice dictation for Mac. Your providers, your data, no subscription.",
   },
 };
 

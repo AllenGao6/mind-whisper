@@ -5,7 +5,13 @@ export const LATEST_RELEASE_URL = `${GITHUB_URL}/releases/latest`;
 export const DOWNLOAD_ARM64 = `${LATEST_RELEASE_URL}/download/MindWhisper-arm64.dmg`;
 export const DOWNLOAD_X64 = `${LATEST_RELEASE_URL}/download/MindWhisper-x64.dmg`;
 
+export const PROVIDER_KEY_URLS = {
+  openai: 'https://platform.openai.com/api-keys',
+  deepgram: 'https://console.deepgram.com/',
+  groq: 'https://console.groq.com/keys',
+} as const;
+
 export const PRODUCT_NAME = 'MindWhisper';
-export const PRODUCT_TAGLINE = 'Hold-to-talk dictation for macOS, in any language.';
+export const PRODUCT_TAGLINE = 'Open-source voice dictation for Mac.';
 export const PRODUCT_AUTHOR = 'liveq.ai';
 export const PRODUCT_AUTHOR_URL = 'https://liveq.ai';

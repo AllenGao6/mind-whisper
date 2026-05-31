@@ -498,7 +498,12 @@ function recreateTray() {
 //   3. Idempotent — safe to call multiple times if the user double-clicks Quit.
 let isQuitInProgress = false;
 let isUpdateInstallInProgress = false;
-function prepareForAppExit(reason) {
+let updateInstallQuitWatchdogId = null;
+const UPDATE_INSTALL_QUIT_WATCHDOG_MS = 5_000;
+const NORMAL_QUIT_HARD_EXIT_MS = 2_000;
+const UPDATE_QUIT_HARD_EXIT_MS = 10_000;
+
+function prepareForMenuBarExit(reason) {
   if (isQuitInProgress) return;
   isQuitInProgress = true;
   app.isQuitting = true;
@@ -523,7 +528,7 @@ function prepareForAppExit(reason) {
 
 function gracefulQuit() {
   if (isQuitInProgress) return;
-  prepareForAppExit('graceful shutdown');
+  prepareForMenuBarExit('graceful shutdown');
 
   // Defer so Cocoa's NSMenu modal callback fully unwinds before app.quit()
   // walks the window list. Without this, the signed-build quit hangs.
@@ -1428,6 +1433,7 @@ function setupAutoUpdater() {
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoRunAppAfterInstall = true;
   autoUpdater.logger = {
     info: (m) => console.log('[autoUpdater]', m),
     warn: (m) => console.warn('[autoUpdater]', m),
@@ -1515,8 +1521,15 @@ function installUpdateNow() {
   isUpdateInstallInProgress = true;
   pendingUpdateInstall = false;
   installPromptPending = false;
-  prepareForAppExit('update install');
-  // isSilent=false shows the installer UI; isForceRunAfter=true relaunches the new version after install.
+  prepareForMenuBarExit('update install');
+  updateInstallQuitWatchdogId = setTimeout(() => {
+    console.warn('[autoUpdater] quitAndInstall did not quit within 5 s — forcing app quit');
+    app.quit();
+  }, UPDATE_INSTALL_QUIT_WATCHDOG_MS);
+  if (updateInstallQuitWatchdogId && typeof updateInstallQuitWatchdogId.unref === 'function') {
+    updateInstallQuitWatchdogId.unref();
+  }
+  // isSilent=false shows the installer UI; relaunch is controlled by autoRunAppAfterInstall on macOS.
   setImmediate(() => {
     try {
       autoUpdater.quitAndInstall(false, true);
@@ -1730,14 +1743,19 @@ app.on('before-quit', () => {
   } catch (_) {}
 
   try { uIOhook.stop(); } catch (_) {}
+  if (updateInstallQuitWatchdogId) {
+    clearTimeout(updateInstallQuitWatchdogId);
+    updateInstallQuitWatchdogId = null;
+  }
 
   // Hard-exit watchdog: if Electron's quit sequence stalls (uiohook native
-  // module hang, renderer zombie, AppKit edge case), force-terminate after 2 s.
-  // .unref() so this timer doesn't itself keep the loop alive.
+  // module hang, renderer zombie, AppKit edge case), force-terminate. Update
+  // installs get a longer handoff window so the relaunch path is not cut short.
+  const hardExitMs = isUpdateInstallInProgress ? UPDATE_QUIT_HARD_EXIT_MS : NORMAL_QUIT_HARD_EXIT_MS;
   setTimeout(() => {
-    console.warn('[quit] hard exit after 2 s — Electron quit sequence stalled');
+    console.warn(`[quit] hard exit after ${hardExitMs / 1000} s — Electron quit sequence stalled`);
     process.exit(0);
-  }, 2000).unref();
+  }, hardExitMs).unref();
 });
 
 app.on('will-quit', () => {
